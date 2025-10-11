@@ -1,24 +1,35 @@
 import React from 'react';
-import { BookOpen, DollarSign, Menu, X } from 'lucide-react';
+import { BookOpen, DollarSign, Menu, X, ShoppingCart } from 'lucide-react';
 
-const Header = ({ userProfile, points, showMobileMenu, setShowMobileMenu }) => {
+const Header = ({ userProfile, points, showMobileMenu, setShowMobileMenu, cart, setShowCart }) => {
   return (
-    <div className="bg-white shadow-lg border-b border-indigo-100">
+    <div className="bg-white shadow-lg border-b border-cyan-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-xl flex items-center justify-center">
               <BookOpen className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-600 to-teal-600 bg-clip-text text-transparent">
                 Course Bidding
               </h1>
               <p className="text-xs text-gray-600 hidden sm:block">Welcome, {userProfile.name}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-2 rounded-xl shadow-lg">
+            <button
+              onClick={() => setShowCart(true)}
+              className="relative p-2 hover:bg-gray-100 rounded-xl transition-all"
+            >
+              <ShoppingCart className="w-6 h-6 text-gray-700" />
+              {cart.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                  {cart.length}
+                </span>
+              )}
+            </button>
+            <div className="hidden md:flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-teal-600 text-white px-5 py-2 rounded-xl shadow-lg">
               <DollarSign className="w-5 h-5" />
               <div>
                 <p className="text-xs opacity-90">Points</p>

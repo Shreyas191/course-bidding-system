@@ -1,7 +1,7 @@
 import React from 'react';
-import { TrendingUp, Clock, MapPin, Award, Users, Star } from 'lucide-react';
+import { TrendingUp, Clock, MapPin, Award, Users, Star, ShoppingCart } from 'lucide-react';
 
-const CourseCard = ({ course, myBid, setSelectedCourse, handleAddToWaitlist }) => {
+const CourseCard = ({ course, myBid, setSelectedCourse, handleAddToWaitlist, handleAddToCart }) => {
   const seatsLeft = course.seats - course.enrolled;
   const seatPercentage = (course.enrolled / course.seats) * 100;
 
@@ -92,7 +92,7 @@ const CourseCard = ({ course, myBid, setSelectedCourse, handleAddToWaitlist }) =
           </div>
         )}
 
-        <div className="flex gap-2">
+        {/* <div className="flex gap-2">
           <button
             onClick={() => setSelectedCourse(course)}
             className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-2xl font-semibold hover:shadow-xl transition-all hover:scale-105"
@@ -105,8 +105,30 @@ const CourseCard = ({ course, myBid, setSelectedCourse, handleAddToWaitlist }) =
           >
             Waitlist
           </button>
+        </div> */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setSelectedCourse(course)}
+            className="flex-1 bg-gradient-to-r from-cyan-600 to-teal-600 text-white py-3 rounded-2xl font-semibold hover:shadow-xl transition-all hover:scale-105"
+          >
+            {myBid ? 'Update Bid' : 'Bid Now'}
+          </button>
+          <button
+            onClick={() => handleAddToCart(course.id, course.avgBid)}
+            className="p-3 bg-purple-100 text-purple-700 rounded-2xl font-semibold hover:bg-purple-200 transition-all"
+            title="Add to Cart"
+          >
+            <ShoppingCart className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => handleAddToWaitlist(course.id)}
+            className="px-4 py-3 bg-amber-100 text-amber-700 rounded-2xl font-semibold hover:bg-amber-200 transition-all text-sm"
+          >
+            Waitlist
+          </button>
         </div>
       </div>
+      
     </div>
   );
 };

@@ -11,7 +11,8 @@ const BrowseCourses = ({
   filteredCourses, 
   myBids, 
   setSelectedCourse, 
-  handleAddToWaitlist 
+  handleAddToWaitlist,
+  handleAddToCart
 }) => {
   return (
     <div>
@@ -58,6 +59,7 @@ const BrowseCourses = ({
               myBid={myBid}
               setSelectedCourse={setSelectedCourse}
               handleAddToWaitlist={handleAddToWaitlist}
+              handleAddToCart={handleAddToCart}
             />
           );
         })}

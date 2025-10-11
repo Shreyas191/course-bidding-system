@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import LoginPage from './components/Auth/LoginPage';
 import Header from './components/Layout/Header';
 import Sidebar from './components/Layout/Sidebar';
+import Home from './components/Home/Home';
 import BrowseCourses from './components/Courses/BrowseCourses';
 import BidModal from './components/Courses/BidModal';
+import Cart from './components/Cart/Cart';
 import MyBids from './components/Bids/MyBids';
 import RegisteredCourses from './components/Registered/RegisteredCourses';
 import Waitlist from './components/Waitlist/Waitlist';
@@ -19,6 +21,8 @@ const App = () => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [showCart, setShowCart] = useState(false);
+  
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({ 
     name: '', 
@@ -28,6 +32,7 @@ const App = () => {
     major: ''
   });
   const [isSignup, setIsSignup] = useState(false);
+  
   const [userProfile, setUserProfile] = useState({
     name: 'Alex Johnson',
     email: 'alex.johnson@university.edu',
@@ -76,6 +81,8 @@ const App = () => {
     }
   ]);
 
+  const [cart, setCart] = useState([]);
+
   const [myBids, setMyBids] = useState([
     { courseId: 1, amount: 85, status: 'leading', timestamp: '2 hours ago' },
     { courseId: 4, amount: 70, status: 'outbid', timestamp: '5 hours ago' }
@@ -106,7 +113,7 @@ const App = () => {
   const handleLogin = (e) => {
     e.preventDefault();
     setIsLoggedIn(true);
-    setCurrentPage('browse');
+    setCurrentPage('home');
   };
 
   const handleSignup = (e) => {
@@ -119,7 +126,7 @@ const App = () => {
       major: signupForm.major
     });
     setIsLoggedIn(true);
-    setCurrentPage('browse');
+    setCurrentPage('home');
   };
 
   const handleLogout = () => {
@@ -165,6 +172,61 @@ const App = () => {
     setBidAmount('');
   };
 
+  const handleAddToCart = (courseId, bidAmount) => {
+    const course = courses.find(c => c.id === courseId);
+    const existingCartItem = cart.find(item => item.courseId === courseId);
+    
+    if (existingCartItem) {
+      alert('Course already in cart!');
+      return;
+    }
+    
+    const existingBid = myBids.find(b => b.courseId === courseId);
+    if (existingBid) {
+      alert('You already have an active bid for this course!');
+      return;
+    }
+    
+    setCart([...cart, {
+      courseId,
+      bidAmount: bidAmount || course.minBid,
+      addedAt: new Date().toISOString()
+    }]);
+    alert('Added to cart!');
+  };
+
+  const handleRemoveFromCart = (courseId) => {
+    setCart(cart.filter(item => item.courseId !== courseId));
+  };
+
+  const handleUpdateCartBid = (courseId, newAmount) => {
+    setCart(cart.map(item => 
+      item.courseId === courseId ? {...item, bidAmount: newAmount} : item
+    ));
+  };
+
+  const handleCheckout = () => {
+    const totalBid = cart.reduce((sum, item) => sum + item.bidAmount, 0);
+    
+    if (totalBid > points) {
+      alert('Insufficient points! You need ' + (totalBid - points) + ' more points.');
+      return;
+    }
+
+    const newBids = cart.map(item => ({
+      courseId: item.courseId,
+      amount: item.bidAmount,
+      status: item.bidAmount >= courses.find(c => c.id === item.courseId).avgBid ? 'leading' : 'active',
+      timestamp: 'Just now'
+    }));
+
+    setMyBids([...myBids, ...newBids]);
+    setPoints(points - totalBid);
+    setCart([]);
+    setShowCart(false);
+    alert('Successfully placed ' + newBids.length + ' bids!');
+  };
+
   const handleAddToWaitlist = (courseId) => {
     const isAlreadyOnWaitlist = waitlist.some(w => w.courseId === courseId);
     if (!isAlreadyOnWaitlist) {
@@ -201,12 +263,14 @@ const App = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+    <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-teal-50 to-emerald-50">
       <Header
         userProfile={userProfile}
         points={points}
         showMobileMenu={showMobileMenu}
         setShowMobileMenu={setShowMobileMenu}
+        cart={cart}
+        setShowCart={setShowCart}
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-6 py-6">
@@ -223,6 +287,18 @@ const App = () => {
         />
 
         <div className="flex-1 overflow-auto">
+          {currentPage === 'home' && (
+            <Home
+              cart={cart}
+              courses={courses}
+              myBids={myBids}
+              registeredCourses={registeredCourses}
+              points={points}
+              setShowCart={setShowCart}
+              setCurrentPage={setCurrentPage}
+            />
+          )}
+
           {currentPage === 'browse' && (
             <BrowseCourses
               searchTerm={searchTerm}
@@ -234,6 +310,7 @@ const App = () => {
               myBids={myBids}
               setSelectedCourse={setSelectedCourse}
               handleAddToWaitlist={handleAddToWaitlist}
+              handleAddToCart={handleAddToCart}
             />
           )}
 
@@ -278,6 +355,17 @@ const App = () => {
         points={points}
         setSelectedCourse={setSelectedCourse}
         handlePlaceBid={handlePlaceBid}
+      />
+
+      <Cart
+        showCart={showCart}
+        setShowCart={setShowCart}
+        cart={cart}
+        courses={courses}
+        points={points}
+        handleRemoveFromCart={handleRemoveFromCart}
+        handleUpdateCartBid={handleUpdateCartBid}
+        handleCheckout={handleCheckout}
       />
     </div>
   );
