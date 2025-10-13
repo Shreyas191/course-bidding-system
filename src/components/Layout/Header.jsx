@@ -1,7 +1,7 @@
 import React from 'react';
-import { BookOpen, DollarSign, Menu, X, ShoppingCart } from 'lucide-react';
+import { BookOpen, DollarSign, Menu, X, ShoppingCart, Clock } from 'lucide-react';
 
-const Header = ({ userProfile, points, showMobileMenu, setShowMobileMenu, cart, setShowCart }) => {
+const Header = ({ userProfile, points, showMobileMenu, setShowMobileMenu, cart, setShowCart, currentRound, roundStatus }) => {
   return (
     <div className="bg-white shadow-lg border-b border-cyan-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
@@ -18,6 +18,18 @@ const Header = ({ userProfile, points, showMobileMenu, setShowMobileMenu, cart, 
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {/* Round Indicator - Updated Colors */}
+            <div className={`hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl ${
+              currentRound === 1 ? 'bg-cyan-100 text-cyan-700' : 'bg-teal-100 text-teal-700'
+            }`}>
+              <Clock className="w-4 h-4" />
+              <div className="text-sm">
+                <span className="font-bold">Round {currentRound}</span>
+                <span className="mx-1">•</span>
+                <span className="capitalize">{roundStatus}</span>
+              </div>
+            </div>
+
             <button
               onClick={() => setShowCart(true)}
               className="relative p-2 hover:bg-gray-100 rounded-xl transition-all"

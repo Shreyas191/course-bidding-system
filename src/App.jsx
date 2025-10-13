@@ -23,6 +23,15 @@ const App = () => {
   const [editingProfile, setEditingProfile] = useState(false);
   const [showCart, setShowCart] = useState(false);
   
+  // Round system state - NEW
+  const [currentRound, setCurrentRound] = useState(1); // 1 or 2
+  const [roundStatus, setRoundStatus] = useState('active'); // 'active' or 'closed'
+  const [roundEndTime] = useState('2024-10-20T23:59:59'); // Round 1 end time
+  const [round1EndDate] = useState('Oct 20, 2024');
+  const [round2EndDate] = useState('Oct 23, 2024');
+  
+  // ... rest of your existing state ...
+
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({ 
     name: '', 
@@ -84,8 +93,8 @@ const App = () => {
   const [cart, setCart] = useState([]);
 
   const [myBids, setMyBids] = useState([
-    { courseId: 1, amount: 85, status: 'leading', timestamp: '2 hours ago' },
-    { courseId: 4, amount: 70, status: 'outbid', timestamp: '5 hours ago' }
+    { courseId: 1, amount: 85, status: 'leading', timestamp: '2 hours ago', round: 1 },
+    { courseId: 4, amount: 70, status: 'outbid', timestamp: '5 hours ago', round: 1 }
   ]);
 
   const [registeredCourses] = useState([
@@ -137,6 +146,12 @@ const App = () => {
 
   const handlePlaceBid = () => {
     if (!selectedCourse || !bidAmount) return;
+    
+    if (roundStatus === 'closed') {
+      alert('Bidding is closed for this round!');
+      return;
+    }
+    
     const bid = parseInt(bidAmount);
     if (bid > points) {
       alert('Insufficient points!');
@@ -156,7 +171,8 @@ const App = () => {
         courseId: selectedCourse.id,
         amount: bid,
         status: bid >= selectedCourse.avgBid ? 'leading' : 'active',
-        timestamp: 'Just now'
+        timestamp: 'Just now',
+        round: currentRound
       };
       setMyBids(newBids);
     } else {
@@ -165,7 +181,8 @@ const App = () => {
         courseId: selectedCourse.id,
         amount: bid,
         status: bid >= selectedCourse.avgBid ? 'leading' : 'active',
-        timestamp: 'Just now'
+        timestamp: 'Just now',
+        round: currentRound
       }]);
     }
     setSelectedCourse(null);
@@ -173,6 +190,11 @@ const App = () => {
   };
 
   const handleAddToCart = (courseId, bidAmount) => {
+    if (roundStatus === 'closed') {
+      alert('Bidding is closed for this round!');
+      return;
+    }
+    
     const course = courses.find(c => c.id === courseId);
     const existingCartItem = cart.find(item => item.courseId === courseId);
     
@@ -190,7 +212,8 @@ const App = () => {
     setCart([...cart, {
       courseId,
       bidAmount: bidAmount || course.minBid,
-      addedAt: new Date().toISOString()
+      addedAt: new Date().toISOString(),
+      round: currentRound
     }]);
     alert('Added to cart!');
   };
@@ -206,6 +229,11 @@ const App = () => {
   };
 
   const handleCheckout = () => {
+    if (roundStatus === 'closed') {
+      alert('Bidding is closed for this round!');
+      return;
+    }
+    
     const totalBid = cart.reduce((sum, item) => sum + item.bidAmount, 0);
     
     if (totalBid > points) {
@@ -217,14 +245,15 @@ const App = () => {
       courseId: item.courseId,
       amount: item.bidAmount,
       status: item.bidAmount >= courses.find(c => c.id === item.courseId).avgBid ? 'leading' : 'active',
-      timestamp: 'Just now'
+      timestamp: 'Just now',
+      round: currentRound
     }));
 
     setMyBids([...myBids, ...newBids]);
     setPoints(points - totalBid);
     setCart([]);
     setShowCart(false);
-    alert('Successfully placed ' + newBids.length + ' bids!');
+    alert('Successfully placed ' + newBids.length + ' bids in Round ' + currentRound + '!');
   };
 
   const handleAddToWaitlist = (courseId) => {
@@ -271,6 +300,8 @@ const App = () => {
         setShowMobileMenu={setShowMobileMenu}
         cart={cart}
         setShowCart={setShowCart}
+        currentRound={currentRound}
+        roundStatus={roundStatus}
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-6 py-6">
@@ -296,6 +327,11 @@ const App = () => {
               points={points}
               setShowCart={setShowCart}
               setCurrentPage={setCurrentPage}
+              currentRound={currentRound}
+              roundStatus={roundStatus}
+              roundEndTime={roundEndTime}
+              round1EndDate={round1EndDate}
+              round2EndDate={round2EndDate}
             />
           )}
 
@@ -355,6 +391,8 @@ const App = () => {
         points={points}
         setSelectedCourse={setSelectedCourse}
         handlePlaceBid={handlePlaceBid}
+        currentRound={currentRound}
+        roundStatus={roundStatus}
       />
 
       <Cart
@@ -366,6 +404,8 @@ const App = () => {
         handleRemoveFromCart={handleRemoveFromCart}
         handleUpdateCartBid={handleUpdateCartBid}
         handleCheckout={handleCheckout}
+        currentRound={currentRound}
+        roundStatus={roundStatus}
       />
     </div>
   );

@@ -1,7 +1,22 @@
 import React from 'react';
 import { ShoppingCart, TrendingUp, Users, BookOpen, Award, DollarSign } from 'lucide-react';
+import RoundInfo from '../Rounds/RoundInfo';
+import RoundTimeline from '../Rounds/RoundTimeline';
 
-const Home = ({ cart, courses, myBids, registeredCourses, points, setShowCart, setCurrentPage }) => {
+const Home = ({ 
+  cart, 
+  courses, 
+  myBids, 
+  registeredCourses, 
+  points, 
+  setShowCart, 
+  setCurrentPage,
+  currentRound,
+  roundStatus,
+  roundEndTime,
+  round1EndDate,
+  round2EndDate
+}) => {
   const getCourseById = (id) => courses.find(c => c.id === id);
   const getCartTotal = () => cart.reduce((sum, item) => sum + item.bidAmount, 0);
 
@@ -48,6 +63,13 @@ const Home = ({ cart, courses, myBids, registeredCourses, points, setShowCart, s
         <p className="text-cyan-100">Ready to bid on your favorite courses?</p>
       </div>
 
+      {/* Round Info - NEW */}
+      <RoundInfo
+        currentRound={currentRound}
+        roundStatus={roundStatus}
+        roundEndTime={roundEndTime}
+      />
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => (
@@ -60,6 +82,13 @@ const Home = ({ cart, courses, myBids, registeredCourses, points, setShowCart, s
           </div>
         ))}
       </div>
+
+      {/* Round Timeline - NEW */}
+      <RoundTimeline
+        currentRound={currentRound}
+        round1EndDate={round1EndDate}
+        round2EndDate={round2EndDate}
+      />
 
       {/* Cart Summary */}
       {cart.length > 0 && (
