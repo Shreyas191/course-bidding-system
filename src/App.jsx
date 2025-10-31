@@ -4,7 +4,6 @@ import Header from './components/Layout/Header';
 import Sidebar from './components/Layout/Sidebar';
 import Home from './components/Home/Home';
 import BrowseCourses from './components/Courses/BrowseCourses';
-import BidModal from './components/Courses/BidModal';
 import Cart from './components/Cart/Cart';
 import MyBids from './components/Bids/MyBids';
 import RegisteredCourses from './components/Registered/RegisteredCourses';
@@ -15,23 +14,12 @@ const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentPage, setCurrentPage] = useState('login');
   const [points, setPoints] = useState(1000);
-  const [selectedCourse, setSelectedCourse] = useState(null);
-  const [bidAmount, setBidAmount] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [showCart, setShowCart] = useState(false);
   
-  // Round system state - NEW
-  const [currentRound, setCurrentRound] = useState(1); // 1 or 2
-  const [roundStatus, setRoundStatus] = useState('active'); // 'active' or 'closed'
-  const [roundEndTime] = useState('2024-10-20T23:59:59'); // Round 1 end time
-  const [round1EndDate] = useState('Oct 20, 2024');
-  const [round2EndDate] = useState('Oct 23, 2024');
-  
-  // ... rest of your existing state ...
-
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({ 
     name: '', 
@@ -54,6 +42,18 @@ const App = () => {
     credits: '84'
   });
   const [tempProfile, setTempProfile] = useState({...userProfile});
+
+  // Round system state
+  const [currentRound, setCurrentRound] = useState(1);
+  const [roundStatus, setRoundStatus] = useState('active');
+  const [roundEndTime] = useState('2024-10-20T23:59:59');
+  const [round1EndDate] = useState('Oct 20, 2024');
+  const [round2EndDate] = useState('Oct 23, 2024');
+  
+  // Round 1 results - courses student got/didn't get
+  const [round1Results, setRound1Results] = useState([]);
+  const [coursesWon, setCoursesWon] = useState([]);
+  const [coursesLost, setCoursesLost] = useState([]);
 
   const categories = ['all', 'Computer Science', 'Business', 'Arts', 'Mathematics', 'English', 'Physics'];
 
@@ -92,12 +92,9 @@ const App = () => {
 
   const [cart, setCart] = useState([]);
 
-  const [myBids, setMyBids] = useState([
-    { courseId: 1, amount: 85, status: 'leading', timestamp: '2 hours ago', round: 1 },
-    { courseId: 4, amount: 70, status: 'outbid', timestamp: '5 hours ago', round: 1 }
-  ]);
+  const [myBids, setMyBids] = useState([]);
 
-  const [registeredCourses] = useState([
+  const [registeredCourses, setRegisteredCourses] = useState([
     {
       id: 7, code: 'CS201', name: 'Data Structures', instructor: 'Dr. Lisa Martinez',
       schedule: 'MWF 14:00-15:30', credits: 4, location: 'Tech Building 103', grade: 'A', status: 'ongoing'
@@ -144,51 +141,6 @@ const App = () => {
     setShowMobileMenu(false);
   };
 
-  const handlePlaceBid = () => {
-    if (!selectedCourse || !bidAmount) return;
-    
-    if (roundStatus === 'closed') {
-      alert('Bidding is closed for this round!');
-      return;
-    }
-    
-    const bid = parseInt(bidAmount);
-    if (bid > points) {
-      alert('Insufficient points!');
-      return;
-    }
-    if (bid < selectedCourse.minBid) {
-      alert('Minimum bid is ' + selectedCourse.minBid + ' points');
-      return;
-    }
-
-    const existingBidIndex = myBids.findIndex(b => b.courseId === selectedCourse.id);
-    if (existingBidIndex >= 0) {
-      const oldBid = myBids[existingBidIndex].amount;
-      setPoints(points + oldBid - bid);
-      const newBids = [...myBids];
-      newBids[existingBidIndex] = {
-        courseId: selectedCourse.id,
-        amount: bid,
-        status: bid >= selectedCourse.avgBid ? 'leading' : 'active',
-        timestamp: 'Just now',
-        round: currentRound
-      };
-      setMyBids(newBids);
-    } else {
-      setPoints(points - bid);
-      setMyBids([...myBids, {
-        courseId: selectedCourse.id,
-        amount: bid,
-        status: bid >= selectedCourse.avgBid ? 'leading' : 'active',
-        timestamp: 'Just now',
-        round: currentRound
-      }]);
-    }
-    setSelectedCourse(null);
-    setBidAmount('');
-  };
-
   const handleAddToCart = (courseId, bidAmount) => {
     if (roundStatus === 'closed') {
       alert('Bidding is closed for this round!');
@@ -203,10 +155,19 @@ const App = () => {
       return;
     }
     
-    const existingBid = myBids.find(b => b.courseId === courseId);
+    const existingBid = myBids.find(b => b.courseId === courseId && b.round === currentRound);
     if (existingBid) {
-      alert('You already have an active bid for this course!');
+      alert('You already have an active bid for this course in Round ' + currentRound + '!');
       return;
+    }
+
+    // In Round 2, check if student won this course in Round 1
+    if (currentRound === 2) {
+      const wonInRound1 = coursesWon.find(c => c.courseId === courseId);
+      if (wonInRound1) {
+        alert('You already got this course in Round 1!');
+        return;
+      }
     }
     
     setCart([...cart, {
@@ -215,7 +176,7 @@ const App = () => {
       addedAt: new Date().toISOString(),
       round: currentRound
     }]);
-    alert('Added to cart!');
+    alert('Added to cart! Go to cart to review and checkout.');
   };
 
   const handleRemoveFromCart = (courseId) => {
@@ -241,6 +202,12 @@ const App = () => {
       return;
     }
 
+    if (cart.length === 0) {
+      alert('Your cart is empty!');
+      return;
+    }
+
+    // Create bids from cart
     const newBids = cart.map(item => ({
       courseId: item.courseId,
       amount: item.bidAmount,
@@ -253,7 +220,7 @@ const App = () => {
     setPoints(points - totalBid);
     setCart([]);
     setShowCart(false);
-    alert('Successfully placed ' + newBids.length + ' bids in Round ' + currentRound + '!');
+    alert('Successfully placed ' + newBids.length + ' bid(s) in Round ' + currentRound + '!\n\nYour bids are now active. Check "My Bids" to track their status.');
   };
 
   const handleAddToWaitlist = (courseId) => {
@@ -274,6 +241,50 @@ const App = () => {
   const handleSaveProfile = () => {
     setUserProfile(tempProfile);
     setEditingProfile(false);
+  };
+
+  // Simulate Round 1 end and determine results
+  const handleEndRound1 = () => {
+    if (currentRound !== 1) return;
+
+    // Simulate results - some bids won, some lost
+    const round1Bids = myBids.filter(b => b.round === 1);
+    const won = [];
+    const lost = [];
+
+    round1Bids.forEach(bid => {
+      // Simple simulation - bids >= avgBid win
+      if (bid.amount >= courses.find(c => c.id === bid.courseId).avgBid) {
+        won.push({
+          courseId: bid.courseId,
+          bidAmount: bid.amount,
+          round: 1
+        });
+      } else {
+        lost.push({
+          courseId: bid.courseId,
+          bidAmount: bid.amount,
+          round: 1
+        });
+      }
+    });
+
+    setCoursesWon(won);
+    setCoursesLost(lost);
+    setRound1Results([...won, ...lost]);
+    setCurrentRound(2);
+    setRoundStatus('active');
+    
+    alert(`Round 1 Results:\n✅ Won: ${won.length} course(s)\n❌ Lost: ${lost.length} course(s)\n\nRound 2 is now open! You can rebid for courses you didn't get.`);
+  };
+
+  // For demo: Add a button to simulate round end
+  const handleSimulateRoundEnd = () => {
+    if (currentRound === 1) {
+      handleEndRound1();
+    } else {
+      alert('Round 2 has ended! Final results will be processed.');
+    }
   };
 
   if (!isLoggedIn) {
@@ -318,6 +329,21 @@ const App = () => {
         />
 
         <div className="flex-1 overflow-auto">
+          {/* Demo Button - Remove in production */}
+          {myBids.length > 0 && currentRound <= 2 && (
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+              <p className="text-sm text-amber-800 mb-2">
+                <strong>Demo Mode:</strong> Simulate round ending to see results
+              </p>
+              <button
+                onClick={handleSimulateRoundEnd}
+                className="px-4 py-2 bg-amber-600 text-white rounded-xl font-semibold hover:bg-amber-700 transition-all"
+              >
+                End Round {currentRound} & View Results
+              </button>
+            </div>
+          )}
+
           {currentPage === 'home' && (
             <Home
               cart={cart}
@@ -332,6 +358,8 @@ const App = () => {
               roundEndTime={roundEndTime}
               round1EndDate={round1EndDate}
               round2EndDate={round2EndDate}
+              coursesWon={coursesWon}
+              coursesLost={coursesLost}
             />
           )}
 
@@ -344,9 +372,10 @@ const App = () => {
               categories={categories}
               filteredCourses={filteredCourses}
               myBids={myBids}
-              setSelectedCourse={setSelectedCourse}
               handleAddToWaitlist={handleAddToWaitlist}
               handleAddToCart={handleAddToCart}
+              currentRound={currentRound}
+              coursesWon={coursesWon}
             />
           )}
 
@@ -354,7 +383,9 @@ const App = () => {
             <MyBids
               myBids={myBids}
               courses={courses}
-              setSelectedCourse={setSelectedCourse}
+              currentRound={currentRound}
+              coursesWon={coursesWon}
+              coursesLost={coursesLost}
             />
           )}
 
@@ -383,17 +414,6 @@ const App = () => {
           )}
         </div>
       </div>
-
-      <BidModal
-        selectedCourse={selectedCourse}
-        bidAmount={bidAmount}
-        setBidAmount={setBidAmount}
-        points={points}
-        setSelectedCourse={setSelectedCourse}
-        handlePlaceBid={handlePlaceBid}
-        currentRound={currentRound}
-        roundStatus={roundStatus}
-      />
 
       <Cart
         showCart={showCart}

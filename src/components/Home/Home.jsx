@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, TrendingUp, Users, BookOpen, Award, DollarSign } from 'lucide-react';
+import { ShoppingCart, TrendingUp, Users, BookOpen, Award, DollarSign, CheckCircle, XCircle } from 'lucide-react';
 import RoundInfo from '../Rounds/RoundInfo';
 import RoundTimeline from '../Rounds/RoundTimeline';
 
@@ -15,7 +15,9 @@ const Home = ({
   roundStatus,
   roundEndTime,
   round1EndDate,
-  round2EndDate
+  round2EndDate,
+  coursesWon,
+  coursesLost
 }) => {
   const getCourseById = (id) => courses.find(c => c.id === id);
   const getCartTotal = () => cart.reduce((sum, item) => sum + item.bidAmount, 0);
@@ -39,7 +41,7 @@ const Home = ({
     },
     {
       title: 'Active Bids',
-      value: myBids.length,
+      value: myBids.filter(b => b.round === currentRound).length,
       icon: TrendingUp,
       color: 'from-amber-500 to-orange-500',
       bgColor: 'bg-amber-50',
@@ -47,7 +49,7 @@ const Home = ({
     },
     {
       title: 'Enrolled Courses',
-      value: registeredCourses.length,
+      value: registeredCourses.length + coursesWon.length,
       icon: BookOpen,
       color: 'from-emerald-500 to-green-500',
       bgColor: 'bg-emerald-50',
@@ -60,10 +62,76 @@ const Home = ({
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-cyan-600 to-teal-600 rounded-3xl shadow-lg p-8 text-white">
         <h1 className="text-3xl font-bold mb-2">Welcome Back! 🎓</h1>
-        <p className="text-cyan-100">Ready to bid on your favorite courses?</p>
+        <p className="text-cyan-100">
+          {currentRound === 1 
+            ? 'Add courses to cart and checkout to place your bids for Round 1!' 
+            : 'Round 2 is open! Bid on courses you didn\'t get in Round 1.'}
+        </p>
       </div>
 
-      {/* Round Info - NEW */}
+      {/* Round 1 Results */}
+      {currentRound === 2 && (coursesWon.length > 0 || coursesLost.length > 0) && (
+        <div className="bg-white rounded-3xl shadow-lg p-6">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Round 1 Results</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Courses Won */}
+            <div className="bg-emerald-50 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle className="w-6 h-6 text-emerald-600" />
+                <h3 className="text-lg font-bold text-emerald-800">Courses Won ({coursesWon.length})</h3>
+              </div>
+              {coursesWon.length > 0 ? (
+                <div className="space-y-2">
+                  {coursesWon.map((item) => {
+                    const course = getCourseById(item.courseId);
+                    return (
+                      <div key={item.courseId} className="bg-white rounded-xl p-3">
+                        <p className="font-semibold text-gray-800">{course.code} - {course.name}</p>
+                        <p className="text-sm text-gray-600">Bid: {item.bidAmount} pts</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-emerald-700">No courses won yet</p>
+              )}
+            </div>
+
+            {/* Courses Lost */}
+            <div className="bg-rose-50 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <XCircle className="w-6 h-6 text-rose-600" />
+                <h3 className="text-lg font-bold text-rose-800">Courses Lost ({coursesLost.length})</h3>
+              </div>
+              {coursesLost.length > 0 ? (
+                <div className="space-y-2">
+                  {coursesLost.map((item) => {
+                    const course = getCourseById(item.courseId);
+                    return (
+                      <div key={item.courseId} className="bg-white rounded-xl p-3">
+                        <p className="font-semibold text-gray-800">{course.code} - {course.name}</p>
+                        <p className="text-sm text-gray-600">Bid: {item.bidAmount} pts (Not enough)</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-rose-700">You got all courses!</p>
+              )}
+            </div>
+          </div>
+          
+          {coursesLost.length > 0 && (
+            <div className="mt-4 p-4 bg-blue-50 rounded-xl">
+              <p className="text-sm text-blue-800">
+                <strong>💡 Tip:</strong> You can rebid on the {coursesLost.length} course(s) you didn't get in Round 2. Browse courses and add them to your cart!
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Round Info */}
       <RoundInfo
         currentRound={currentRound}
         roundStatus={roundStatus}
@@ -83,7 +151,7 @@ const Home = ({
         ))}
       </div>
 
-      {/* Round Timeline - NEW */}
+      {/* Round Timeline */}
       <RoundTimeline
         currentRound={currentRound}
         round1EndDate={round1EndDate}
@@ -92,15 +160,18 @@ const Home = ({
 
       {/* Cart Summary */}
       {cart.length > 0 && (
-        <div className="bg-white rounded-3xl shadow-lg p-6">
+        <div className="bg-white rounded-3xl shadow-lg p-6 border-2 border-cyan-200">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-gray-800">Cart Summary</h2>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800">Cart Summary</h2>
+              <p className="text-sm text-gray-600">Review and checkout to place your bids</p>
+            </div>
             <button
               onClick={() => setShowCart(true)}
               className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-teal-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
             >
               <ShoppingCart className="w-5 h-5" />
-              View Cart ({cart.length})
+              Checkout ({cart.length})
             </button>
           </div>
           
@@ -128,6 +199,12 @@ const Home = ({
             <p className="text-lg font-semibold text-gray-700">Total Bid Amount:</p>
             <p className="text-2xl font-bold text-cyan-600">{getCartTotal()} points</p>
           </div>
+          
+          <div className="mt-4 p-3 bg-amber-50 rounded-xl">
+            <p className="text-sm text-amber-800">
+              <strong>⚠️ Important:</strong> Your bids will be placed only after you checkout from the cart!
+            </p>
+          </div>
         </div>
       )}
 
@@ -140,10 +217,10 @@ const Home = ({
             </div>
             <div>
               <h3 className="text-xl font-bold text-gray-800">Browse Courses</h3>
-              <p className="text-gray-600 text-sm">Find and bid on courses</p>
+              <p className="text-gray-600 text-sm">Add courses to cart</p>
             </div>
           </div>
-          <p className="text-gray-500">Explore {courses.length} available courses and start bidding</p>
+          <p className="text-gray-500">Explore {courses.length} available courses and add them to your cart</p>
         </div>
 
         <div className="bg-white rounded-3xl shadow-lg p-6 hover:shadow-xl transition-all cursor-pointer" onClick={() => setCurrentPage('mybids')}>
@@ -153,44 +230,10 @@ const Home = ({
             </div>
             <div>
               <h3 className="text-xl font-bold text-gray-800">My Bids</h3>
-              <p className="text-gray-600 text-sm">Track your active bids</p>
+              <p className="text-gray-600 text-sm">Track your placed bids</p>
             </div>
           </div>
-          <p className="text-gray-500">Monitor {myBids.length} active bids and their status</p>
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="bg-white rounded-3xl shadow-lg p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">Recent Activity</h2>
-        <div className="space-y-3">
-          {myBids.slice(0, 3).map((bid) => {
-            const course = getCourseById(bid.courseId);
-            return (
-              <div key={bid.courseId} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    bid.status === 'leading' ? 'bg-emerald-100' : bid.status === 'outbid' ? 'bg-rose-100' : 'bg-blue-100'
-                  }`}>
-                    <Award className={`w-5 h-5 ${
-                      bid.status === 'leading' ? 'text-emerald-600' : bid.status === 'outbid' ? 'text-rose-600' : 'text-blue-600'
-                    }`} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-800">{course.name}</p>
-                    <p className="text-sm text-gray-600">{bid.timestamp}</p>
-                  </div>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  bid.status === 'leading' ? 'bg-emerald-100 text-emerald-700' : 
-                  bid.status === 'outbid' ? 'bg-rose-100 text-rose-700' : 
-                  'bg-blue-100 text-blue-700'
-                }`}>
-                  {bid.status.toUpperCase()}
-                </span>
-              </div>
-            );
-          })}
+          <p className="text-gray-500">View {myBids.length} bid(s) and their results</p>
         </div>
       </div>
     </div>

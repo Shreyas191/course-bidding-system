@@ -10,9 +10,10 @@ const BrowseCourses = ({
   categories, 
   filteredCourses, 
   myBids, 
-  setSelectedCourse, 
   handleAddToWaitlist,
-  handleAddToCart
+  handleAddToCart,
+  currentRound,
+  coursesWon
 }) => {
   return (
     <div>
@@ -24,7 +25,7 @@ const BrowseCourses = ({
             placeholder="Search courses..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none bg-white shadow-sm"
+            className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-gray-200 focus:border-cyan-500 focus:outline-none bg-white shadow-sm"
           />
         </div>
         <div className="relative w-full sm:w-64">
@@ -32,7 +33,7 @@ const BrowseCourses = ({
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
-            className="w-full pl-12 pr-10 py-4 rounded-2xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none bg-white shadow-sm appearance-none cursor-pointer"
+            className="w-full pl-12 pr-10 py-4 rounded-2xl border-2 border-gray-200 focus:border-cyan-500 focus:outline-none bg-white shadow-sm appearance-none cursor-pointer"
             style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
               backgroundRepeat: 'no-repeat',
@@ -51,15 +52,18 @@ const BrowseCourses = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {filteredCourses.map(course => {
-          const myBid = myBids.find(b => b.courseId === course.id);
+          const myBid = myBids.find(b => b.courseId === course.id && b.round === currentRound);
+          const wonInRound1 = coursesWon.find(c => c.courseId === course.id);
+          
           return (
             <CourseCard
               key={course.id}
               course={course}
               myBid={myBid}
-              setSelectedCourse={setSelectedCourse}
+              wonInRound1={wonInRound1}
               handleAddToWaitlist={handleAddToWaitlist}
               handleAddToCart={handleAddToCart}
+              currentRound={currentRound}
             />
           );
         })}
