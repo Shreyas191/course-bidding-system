@@ -1,10 +1,10 @@
-package com.project.cbs_backend;
+package com.project.cbs;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class CbsBackendApplicationTests {
+class CbsApplicationTests {
 
 	@Test
 	void contextLoads() {

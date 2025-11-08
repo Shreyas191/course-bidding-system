@@ -1,13 +1,13 @@
-package com.project.cbs_backend;
+package com.project.cbs;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class CbsBackendApplication {
+public class CbsApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(CbsBackendApplication.class, args);
+		SpringApplication.run(CbsApplication.class, args);
 	}
 
 }
