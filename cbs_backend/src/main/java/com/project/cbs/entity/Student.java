@@ -7,10 +7,12 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDateTime;
 import java.util.List;
 import jakarta.persistence.*;
+import lombok.Data;
 
 @Entity
-@Table(name = "students")
+@Table(name = "student")
 @EntityListeners(AuditingEntityListener.class)
+@Data
 public class Student {
 
     @Id
@@ -23,8 +25,8 @@ public class Student {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(nullable = false)
-    private String password;
+    // @Column(nullable = false)
+    // private String password;
 
     @Column(length = 20)
     private String year;
@@ -43,14 +45,14 @@ public class Student {
     private List<Enrollment> enrollments;
 
     @OneToMany(mappedBy = "student", cascade = CascadeType.ALL)
-    private List<Waitlist> waitlists;
+    private List<WaitList> waitlists;
 
-    @CreatedDate
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    // @CreatedDate
+    // @Column(nullable = false, updatable = false)
+    // private LocalDateTime createdAt;
 
-    @LastModifiedDate
-    @Column(nullable = false)
-    private LocalDateTime updatedAt;
+    // @LastModifiedDate
+    // @Column(nullable = false)
+    // private LocalDateTime updatedAt;
 }
 

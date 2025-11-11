@@ -60,7 +60,7 @@ public class Course {
     private List<Enrollment> enrollments;
 
     @OneToMany(mappedBy = "course", cascade = CascadeType.ALL)
-    private List<Waitlist> waitlists;
+    private List<WaitList> waitlists;
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
