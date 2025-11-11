@@ -1,6 +1,5 @@
 package com.project.cbs.entity;
 
-package com.project.cbs.entity;
 
 import jakarta.persistence.*;
 import org.springframework.data.annotation.CreatedDate;
