@@ -7,15 +7,18 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDateTime;
 import java.util.List;
 import jakarta.persistence.*;
+import lombok.Data;
 
 @Entity
 @Table(name = "instructors")
 @EntityListeners(AuditingEntityListener.class)
+@Data
 public class Instructor {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long instructorId;
+    @Column(name = "instructor_id")
+    private Integer instructorId;
 
     @Column(nullable = false, length = 100)
     private String name;
@@ -37,5 +40,6 @@ public class Instructor {
     @LastModifiedDate
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
 }
 

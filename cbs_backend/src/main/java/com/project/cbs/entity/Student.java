@@ -17,6 +17,7 @@ public class Student {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "student_id")
     private Long studentId;
 
     @Column(nullable = false, length = 100)
@@ -28,8 +29,8 @@ public class Student {
     // @Column(nullable = false)
     // private String password;
 
-    @Column(length = 20)
-    private String year;
+    @Column
+    private Integer year;
 
     @ManyToOne
     @JoinColumn(name = "dept_id", nullable = false)
