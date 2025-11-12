@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import LoginPage from './components/Auth/LoginPage';
 import Header from './components/Layout/Header';
 import Sidebar from './components/Layout/Sidebar';
@@ -9,6 +9,46 @@ import MyBids from './components/Bids/MyBids';
 import RegisteredCourses from './components/Registered/RegisteredCourses';
 import Waitlist from './components/Waitlist/Waitlist';
 import Profile from './components/Profile/Profile';
+
+// Helper function to transform API response to app format
+const transformCourseData = (apiCourses) => {
+  // Group courses by courseId to handle multiple meeting days
+  const courseMap = new Map();
+  
+  apiCourses.forEach(course => {
+    if (!courseMap.has(course.courseId)) {
+      // First occurrence - create the course entry
+      courseMap.set(course.courseId, {
+        id: course.courseId,
+        code: course.courseName.split(' ')[0] || course.courseName,
+        name: course.courseName,
+        instructor: course.instructorName,
+        seats: course.capacity,
+        enrolled: course.enrolled,
+        minBid: course.minBid || 0,
+        avgBid: course.avgBid || course.minBid || 0,
+        category: course.departmentName,
+        rating: 4.5, // Default rating
+        schedule: `${course.day} ${course.time}`,
+        popularity: course.enrolled / course.capacity > 0.7 ? 'high' : 
+                   course.enrolled / course.capacity > 0.4 ? 'medium' : 'low',
+        credits: course.credits,
+        location: course.location,
+        days: [course.day],
+        time: course.time
+      });
+    } else {
+      // Additional meeting day - add to days array
+      const existingCourse = courseMap.get(course.courseId);
+      if (!existingCourse.days.includes(course.day)) {
+        existingCourse.days.push(course.day);
+        existingCourse.schedule = `${existingCourse.days.join('/')} ${course.time}`;
+      }
+    }
+  });
+  
+  return Array.from(courseMap.values());
+};
 
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -50,50 +90,19 @@ const App = () => {
   const [round1EndDate] = useState('Oct 20, 2024');
   const [round2EndDate] = useState('Oct 23, 2024');
   
-  // Round 1 results - courses student got/didn't get
   const [round1Results, setRound1Results] = useState([]);
   const [coursesWon, setCoursesWon] = useState([]);
   const [coursesLost, setCoursesLost] = useState([]);
 
-  const categories = ['all', 'Computer Science', 'Business', 'Arts', 'Mathematics', 'English', 'Physics'];
-
-  const [courses] = useState([
-    {
-      id: 1, code: 'CS301', name: 'Advanced Algorithms', instructor: 'Dr. Sarah Chen',
-      seats: 30, enrolled: 18, minBid: 50, avgBid: 85, category: 'Computer Science',
-      rating: 4.8, schedule: 'MWF 10:00-11:30', popularity: 'high', credits: 3, location: 'Tech Building 205'
-    },
-    {
-      id: 2, code: 'BUS205', name: 'Strategic Management', instructor: 'Prof. Michael Roberts',
-      seats: 40, enrolled: 35, minBid: 40, avgBid: 92, category: 'Business',
-      rating: 4.6, schedule: 'TTh 14:00-16:00', popularity: 'high', credits: 4, location: 'Business Hall 301'
-    },
-    {
-      id: 3, code: 'ART150', name: 'Digital Media Design', instructor: 'Dr. Emily Foster',
-      seats: 25, enrolled: 12, minBid: 30, avgBid: 45, category: 'Arts',
-      rating: 4.9, schedule: 'MW 13:00-15:30', popularity: 'medium', credits: 3, location: 'Arts Center 102'
-    },
-    {
-      id: 4, code: 'MATH220', name: 'Linear Algebra', instructor: 'Prof. David Kim',
-      seats: 35, enrolled: 28, minBid: 45, avgBid: 78, category: 'Mathematics',
-      rating: 4.5, schedule: 'MWF 09:00-10:00', popularity: 'high', credits: 4, location: 'Math Building 410'
-    },
-    {
-      id: 5, code: 'ENG180', name: 'Creative Writing Workshop', instructor: 'Dr. Amanda Brooks',
-      seats: 20, enrolled: 8, minBid: 25, avgBid: 35, category: 'English',
-      rating: 4.7, schedule: 'TTh 16:00-18:00', popularity: 'low', credits: 3, location: 'Library 220'
-    },
-    {
-      id: 6, code: 'PHYS201', name: 'Quantum Mechanics', instructor: 'Prof. James Wilson',
-      seats: 30, enrolled: 22, minBid: 55, avgBid: 88, category: 'Physics',
-      rating: 4.4, schedule: 'MWF 11:00-12:30', popularity: 'medium', credits: 4, location: 'Science Complex 315'
-    }
-  ]);
+  // API state
+  const [courses, setCourses] = useState([]);
+  const [categories, setCategories] = useState(['all']);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const [cart, setCart] = useState([]);
-
   const [myBids, setMyBids] = useState([]);
-
+  
   const [registeredCourses, setRegisteredCourses] = useState([
     {
       id: 7, code: 'CS201', name: 'Data Structures', instructor: 'Dr. Lisa Martinez',
@@ -105,9 +114,46 @@ const App = () => {
     }
   ]);
 
-  const [waitlist, setWaitlist] = useState([
-    { courseId: 2, position: 3, addedDate: '2024-10-05', estimatedChance: 'High' }
-  ]);
+  const [waitlist, setWaitlist] = useState([]);
+
+  // Fetch courses from API
+  useEffect(() => {
+    const fetchCourses = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const response = await fetch('http://localhost:8080/api/courses');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Fetched courses:', data); // Debug log
+        
+        const transformedCourses = transformCourseData(data);
+        console.log('Transformed courses:', transformedCourses); // Debug log
+        
+        setCourses(transformedCourses);
+        
+        // Extract unique categories
+        const uniqueCategories = ['all', ...new Set(data.map(course => course.departmentName))];
+        setCategories(uniqueCategories);
+        
+      } catch (err) {
+        console.error('Error fetching courses:', err);
+        setError('Failed to load courses. Please check if the backend server is running at http://localhost:8080');
+        setCourses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isLoggedIn) {
+      fetchCourses();
+    }
+  }, [isLoggedIn]);
 
   const filteredCourses = courses.filter(course => {
     const matchesSearch = course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -161,7 +207,6 @@ const App = () => {
       return;
     }
 
-    // In Round 2, check if student won this course in Round 1
     if (currentRound === 2) {
       const wonInRound1 = coursesWon.find(c => c.courseId === courseId);
       if (wonInRound1) {
@@ -207,7 +252,6 @@ const App = () => {
       return;
     }
 
-    // Create bids from cart
     const newBids = cart.map(item => ({
       courseId: item.courseId,
       amount: item.bidAmount,
@@ -243,17 +287,14 @@ const App = () => {
     setEditingProfile(false);
   };
 
-  // Simulate Round 1 end and determine results
   const handleEndRound1 = () => {
     if (currentRound !== 1) return;
 
-    // Simulate results - some bids won, some lost
     const round1Bids = myBids.filter(b => b.round === 1);
     const won = [];
     const lost = [];
 
     round1Bids.forEach(bid => {
-      // Simple simulation - bids >= avgBid win
       if (bid.amount >= courses.find(c => c.id === bid.courseId).avgBid) {
         won.push({
           courseId: bid.courseId,
@@ -278,7 +319,6 @@ const App = () => {
     alert(`Round 1 Results:\n✅ Won: ${won.length} course(s)\n❌ Lost: ${lost.length} course(s)\n\nRound 2 is now open! You can rebid for courses you didn't get.`);
   };
 
-  // For demo: Add a button to simulate round end
   const handleSimulateRoundEnd = () => {
     if (currentRound === 1) {
       handleEndRound1();
@@ -329,8 +369,30 @@ const App = () => {
         />
 
         <div className="flex-1 overflow-auto">
-          {/* Demo Button - Remove in production */}
-          {myBids.length > 0 && currentRound <= 2 && (
+          {/* Loading State */}
+          {loading && (currentPage === 'browse' || currentPage === 'home') && (
+            <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading courses from backend...</p>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (currentPage === 'browse' || currentPage === 'home') && (
+            <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
+              <p className="text-red-700 font-semibold mb-2">⚠️ Error Loading Courses</p>
+              <p className="text-red-600 text-sm mb-4">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all font-semibold"
+              >
+                Retry Connection
+              </button>
+            </div>
+          )}
+
+          {/* Demo Button */}
+          {!loading && !error && myBids.length > 0 && currentRound <= 2 && (
             <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
               <p className="text-sm text-amber-800 mb-2">
                 <strong>Demo Mode:</strong> Simulate round ending to see results
@@ -344,7 +406,7 @@ const App = () => {
             </div>
           )}
 
-          {currentPage === 'home' && (
+          {!loading && !error && currentPage === 'home' && (
             <Home
               cart={cart}
               courses={courses}
@@ -363,7 +425,7 @@ const App = () => {
             />
           )}
 
-          {currentPage === 'browse' && (
+          {!loading && !error && currentPage === 'browse' && (
             <BrowseCourses
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}

@@ -24,7 +24,7 @@ public class StudentJdbcRepository {
             s.setName(rs.getString("name"));
             s.setEmail(rs.getString("email"));
             // s.setPassword(rs.getString("password"));
-            s.setYear(rs.getString("year"));
+            s.setYear(rs.getInt("year"));
             // Set department/wallet/bids/enrollments/waitlists if needed by additional queries
             // s.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());
             // s.setUpdatedAt(rs.getTimestamp("updated_at").toLocalDateTime());
@@ -43,7 +43,7 @@ public class StudentJdbcRepository {
     }
 
     public int save(Student student) {
-        String sql = "INSERT INTO student (name, email, year, dept_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+        String sql = "INSERT INTO student (name, email, year, dept_id) VALUES (?, ?, ?, ?)";
         return jdbcTemplate.update(sql, student.getName(), student.getEmail(), student.getYear(), student.getDepartment().getDeptId());
     }
 
