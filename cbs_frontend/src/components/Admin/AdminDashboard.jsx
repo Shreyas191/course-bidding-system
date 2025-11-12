@@ -69,7 +69,7 @@ const AdminDashboard = ({ handleLogout }) => {
   const fetchStudents = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/admin/students', {
+      const response = await fetch('http://localhost:8080/api/students', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -84,7 +84,7 @@ const AdminDashboard = ({ handleLogout }) => {
   const fetchBids = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/admin/bids', {
+      const response = await fetch('http://localhost:8080/api/bids', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -99,7 +99,7 @@ const AdminDashboard = ({ handleLogout }) => {
   // Course CRUD operations
   const handleAddCourse = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/admin/courses', {
+      const response = await fetch('http://localhost:8080/api/courses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +126,7 @@ const AdminDashboard = ({ handleLogout }) => {
 
   const handleUpdateCourse = async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/courses/${editingCourse.courseId}`, {
+      const response = await fetch(`http://localhost:8080/api/courses/${editingCourse.courseId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -152,7 +152,7 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Are you sure you want to delete this course?')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/courses/${courseId}`, {
+      const response = await fetch(`http://localhost:8080/api/courses/${courseId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -171,7 +171,7 @@ const AdminDashboard = ({ handleLogout }) => {
   // Student CRUD operations
   const handleAddStudent = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/admin/students', {
+      const response = await fetch('http://localhost:8080/api/students', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -198,7 +198,7 @@ const AdminDashboard = ({ handleLogout }) => {
 
   const handleUpdateStudent = async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/students/${editingStudent.studentId}`, {
+      const response = await fetch(`http://localhost:8080/api/students/${editingStudent.studentId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -224,7 +224,7 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Are you sure you want to delete this student?')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/students/${studentId}`, {
+      const response = await fetch(`http://localhost:8080/api/students/${studentId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -245,7 +245,7 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Are you sure you want to publish bidding results? This action cannot be undone.')) return;
     
     try {
-      const response = await fetch('http://localhost:8080/api/admin/bids/publish', {
+      const response = await fetch('http://localhost:8080/api/bids/publish', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
