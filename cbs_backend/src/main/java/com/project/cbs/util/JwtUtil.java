@@ -22,10 +22,11 @@ public class JwtUtil {
     }
 
     // Generate JWT token
-    public String generateToken(String email, Long studentId) {
+    public String generateToken(String email, Long studentId, String role) {
         return Jwts.builder()
                 .setSubject(email)
                 .claim("studentId", studentId)
+                .claim("role", role)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
@@ -63,4 +64,8 @@ public class JwtUtil {
     private boolean isTokenExpired(String token) {
         return extractClaims(token).getExpiration().before(new Date());
     }
+
+    public String extractRole(String token) {
+    return extractClaims(token).get("role", String.class);
+}
 }

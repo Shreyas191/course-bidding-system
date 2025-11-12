@@ -42,9 +42,9 @@ public class AuthController {
         }
 
         // Generate JWT token
-        String token = jwtUtil.generateToken(student.getEmail(), student.getStudentId());
+        String token = jwtUtil.generateToken(student.getEmail(), student.getStudentId(), student.getRole());
 
-        LoginResponse response = new LoginResponse(token, student.getStudentId(), student.getEmail(), student.getName());
+        LoginResponse response = new LoginResponse(token, student.getStudentId(), student.getEmail(), student.getName(), student.getRole());
         return ResponseEntity.ok(response);
     }
 }

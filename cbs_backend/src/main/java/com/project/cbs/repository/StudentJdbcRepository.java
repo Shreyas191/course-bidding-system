@@ -25,6 +25,7 @@ public class StudentJdbcRepository {
             s.setEmail(rs.getString("email"));
             s.setPassword(rs.getString("password"));
             s.setYear(rs.getInt("year"));
+            s.setRole(rs.getString("role"));
             // Set department/wallet/bids/enrollments/waitlists if needed by additional queries
             // s.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());
             // s.setUpdatedAt(rs.getTimestamp("updated_at").toLocalDateTime());

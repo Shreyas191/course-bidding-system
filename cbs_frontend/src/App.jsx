@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import LoginPage from './components/Auth/LoginPage';
+import AdminDashboard from './components/Admin/AdminDashboard';
 import Header from './components/Layout/Header';
 import Sidebar from './components/Layout/Sidebar';
 import Home from './components/Home/Home';
@@ -49,8 +50,9 @@ const transformCourseData = (apiCourses) => {
 
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [currentPage, setCurrentPage] = useState('login');
-  const [points, setPoints] = useState(100); // Will be fetched from wallet API
+  const [points, setPoints] = useState(100);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -109,16 +111,16 @@ const App = () => {
     };
   };
 
-  // Fetch all user-specific data after login
+  // Fetch all user-specific data after login (only for students)
   useEffect(() => {
-    if (isLoggedIn) {
+    if (isLoggedIn && !isAdmin) {
       fetchUserProfile();
       fetchUserWallet();
       fetchAllCourses();
       fetchMyEnrollments();
       fetchMyBids();
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, isAdmin]);
 
   // Fetch user profile
   const fetchUserProfile = async () => {
@@ -206,7 +208,7 @@ const App = () => {
         const data = await response.json();
         const transformedEnrollments = transformCourseData(data).map(course => ({
           ...course,
-          grade: 'A', // Default, can be fetched from enrollments table if available
+          grade: 'A',
           status: 'ongoing'
         }));
         setRegisteredCourses(transformedEnrollments);
@@ -225,10 +227,9 @@ const App = () => {
       
       if (response.ok) {
         const data = await response.json();
-        // Transform API bid data to app format
         const transformedBids = data.map(course => ({
           courseId: course.courseId,
-          amount: course.minBid || 0, // You'll need to fetch actual bid amount from bids API
+          amount: course.minBid || 0,
           status: 'active',
           timestamp: 'Recent',
           round: currentRound
@@ -272,21 +273,33 @@ const App = () => {
       const data = await response.json();
       console.log('Login successful:', data);
       
+      // Check if user is admin
+      const userIsAdmin = data.role === 'admin' || 
+                         data.isAdmin === true || 
+                         loginForm.email.toLowerCase().includes('admin');
+      
+      setIsAdmin(userIsAdmin);
+      
       // Store token
       if (data.token) {
         localStorage.setItem('authToken', data.token);
       }
       
+      // Store admin status
+      localStorage.setItem('isAdmin', userIsAdmin.toString());
+      
       // Update user profile from login response
-      setUserProfile({
-        ...userProfile,
-        name: data.name || '',
-        email: data.email || loginForm.email,
-        studentId: data.studentId?.toString() || ''
-      });
+      if (!userIsAdmin) {
+        setUserProfile({
+          ...userProfile,
+          name: data.name || '',
+          email: data.email || loginForm.email,
+          studentId: data.studentId?.toString() || ''
+        });
+      }
       
       setIsLoggedIn(true);
-      setCurrentPage('home');
+      setCurrentPage(userIsAdmin ? 'admin' : 'home');
       setLoginForm({ email: '', password: '' });
       
     } catch (err) {
@@ -301,13 +314,14 @@ const App = () => {
   const handleSignup = async (e) => {
     e.preventDefault();
     alert('Signup is not available. Please use existing credentials to login.');
-    // Signup endpoint not implemented in backend (fixed users only)
   };
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
+    localStorage.removeItem('isAdmin');
     
     setIsLoggedIn(false);
+    setIsAdmin(false);
     setCurrentPage('login');
     setShowMobileMenu(false);
     setCourses([]);
@@ -484,6 +498,7 @@ const App = () => {
     }
   };
 
+  // Login page
   if (!isLoggedIn) {
     return (
       <LoginPage
@@ -499,6 +514,12 @@ const App = () => {
     );
   }
 
+  // Admin Dashboard
+  if (isAdmin) {
+    return <AdminDashboard handleLogout={handleLogout} />;
+  }
+
+  // Student Interface
   return (
     <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-teal-50 to-emerald-50">
       <Header

@@ -5,11 +5,12 @@ public class LoginResponse {
     private Long studentId;
     private String email;
     private String name;
+    private String role; 
 
     // Constructors
     public LoginResponse() {}
 
-    public LoginResponse(String token, Long studentId, String email, String name) {
+    public LoginResponse(String token, Long studentId, String email, String name, String role) {
         this.token = token;
         this.studentId = studentId;
         this.email = email;
@@ -48,4 +49,7 @@ public class LoginResponse {
     public void setName(String name) {
         this.name = name;
     }
+
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
 }
