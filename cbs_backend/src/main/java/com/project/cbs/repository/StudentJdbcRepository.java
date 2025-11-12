@@ -23,7 +23,7 @@ public class StudentJdbcRepository {
             s.setStudentId(rs.getLong("student_id"));
             s.setName(rs.getString("name"));
             s.setEmail(rs.getString("email"));
-            // s.setPassword(rs.getString("password"));
+            s.setPassword(rs.getString("password"));
             s.setYear(rs.getInt("year"));
             // Set department/wallet/bids/enrollments/waitlists if needed by additional queries
             // s.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());
@@ -31,6 +31,12 @@ public class StudentJdbcRepository {
             return s;
         }
     };
+
+     public Optional<Student> findByEmail(String email) {
+        String sql = "SELECT * FROM Student WHERE email = ?";
+        List<Student> results = jdbcTemplate.query(sql, studentRowMapper, email);
+        return results.stream().findFirst();
+    }
 
     public List<Student> findAll() {
         return jdbcTemplate.query("SELECT * FROM student", studentRowMapper);

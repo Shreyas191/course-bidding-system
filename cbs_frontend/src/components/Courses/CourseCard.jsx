@@ -11,9 +11,9 @@ const CourseCard = ({ course, myBid, wonInRound1, handleAddToWaitlist, handleAdd
         <div className="flex justify-between items-start mb-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm font-bold text-cyan-700 bg-cyan-50 px-3 py-1 rounded-full">
+              {/* <span className="text-sm font-bold text-cyan-700 bg-cyan-50 px-3 py-1 rounded-full">
                 {course.code}
-              </span>
+              </span> */}
               {course.popularity === 'high' && (
                 <span className="flex items-center gap-1 text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-1 rounded-full">
                   <TrendingUp className="w-3 h-3" />
@@ -30,10 +30,10 @@ const CourseCard = ({ course, myBid, wonInRound1, handleAddToWaitlist, handleAdd
             <h3 className="text-xl font-bold text-gray-800">{course.name}</h3>
             <p className="text-gray-600 text-sm mt-1">{course.instructor}</p>
           </div>
-          <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-lg">
+          {/* <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-lg">
             <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
             <span className="font-semibold text-amber-700">{course.rating}</span>
-          </div>
+          </div> */}
         </div>
 
         <div className="space-y-2 text-sm text-gray-600 mb-4">

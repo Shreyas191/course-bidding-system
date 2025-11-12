@@ -1,17 +1,50 @@
 package com.project.cbs.controller;
 
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import com.project.cbs.dto.LoginRequest;
+import com.project.cbs.dto.LoginResponse;
+import com.project.cbs.entity.Student;
+import com.project.cbs.repository.StudentJdbcRepository;
+import com.project.cbs.util.JwtUtil;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "*")
 public class AuthController {
-	// TODO: Implement authentication endpoints
-    // - POST /api/auth/register - Register new student
-    // - POST /api/auth/login - Login student
-    // - POST /api/auth/logout - Logout student
-    // - GET /api/auth/me - Get current user
-    // - POST /api/auth/refresh - Refresh token
+
+    @Autowired
+    private StudentJdbcRepository studentRepository;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+        Optional<Student> studentOpt = studentRepository.findByEmail(loginRequest.getEmail());
+
+        if (studentOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid email or password");
+        }
+
+        Student student = studentOpt.get();
+
+        // Verify password
+        if (!passwordEncoder.matches(loginRequest.getPassword(), student.getPassword())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid email or password");
+        }
+
+        // Generate JWT token
+        String token = jwtUtil.generateToken(student.getEmail(), student.getStudentId());
+
+        LoginResponse response = new LoginResponse(token, student.getStudentId(), student.getEmail(), student.getName());
+        return ResponseEntity.ok(response);
+    }
 }

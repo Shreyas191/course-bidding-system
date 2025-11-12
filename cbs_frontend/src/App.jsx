@@ -123,7 +123,19 @@ const App = () => {
       setError(null);
       
       try {
-        const response = await fetch('http://localhost:8080/api/courses');
+        const token = localStorage.getItem('authToken');
+        const headers = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Add authorization header if token exists
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch('http://localhost:8080/api/courses', {
+          headers
+        });
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -162,29 +174,127 @@ const App = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    setIsLoggedIn(true);
-    setCurrentPage('home');
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('http://localhost:8080/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: loginForm.email,
+          password: loginForm.password
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Login failed with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Login successful:', data);
+      
+      // Store user data if returned from API
+      if (data.user) {
+        setUserProfile({
+          ...userProfile,
+          name: data.user.name || userProfile.name,
+          email: data.user.email || loginForm.email,
+          studentId: data.user.studentId || userProfile.studentId,
+          major: data.user.major || userProfile.major
+        });
+      }
+      
+      // Store token if provided
+      if (data.token) {
+        localStorage.setItem('authToken', data.token);
+      }
+      
+      setIsLoggedIn(true);
+      setCurrentPage('home');
+      setLoginForm({ email: '', password: '' }); // Clear form
+      
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(err.message || 'Login failed. Please check your credentials.');
+      alert('Login failed: ' + (err.message || 'Please check your credentials and try again.'));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
-    setUserProfile({
-      ...userProfile,
-      name: signupForm.name,
-      email: signupForm.email,
-      studentId: signupForm.studentId,
-      major: signupForm.major
-    });
-    setIsLoggedIn(true);
-    setCurrentPage('home');
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('http://localhost:8080/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: signupForm.name,
+          email: signupForm.email,
+          password: signupForm.password,
+          studentId: signupForm.studentId,
+          major: signupForm.major
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Signup failed with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Signup successful:', data);
+      
+      // Update user profile with signup data
+      setUserProfile({
+        ...userProfile,
+        name: signupForm.name,
+        email: signupForm.email,
+        studentId: signupForm.studentId,
+        major: signupForm.major
+      });
+      
+      // Store token if provided
+      if (data.token) {
+        localStorage.setItem('authToken', data.token);
+      }
+      
+      setIsLoggedIn(true);
+      setCurrentPage('home');
+      setSignupForm({ name: '', email: '', password: '', studentId: '', major: '' }); // Clear form
+      
+    } catch (err) {
+      console.error('Signup error:', err);
+      setError(err.message || 'Signup failed. Please try again.');
+      alert('Signup failed: ' + (err.message || 'Please check your information and try again.'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = () => {
+    // Clear stored token
+    localStorage.removeItem('authToken');
+    
     setIsLoggedIn(false);
     setCurrentPage('login');
     setShowMobileMenu(false);
+    setCourses([]);
+    setCart([]);
+    setMyBids([]);
+    setCoursesWon([]);
+    setCoursesLost([]);
   };
 
   const handleAddToCart = (courseId, bidAmount) => {
