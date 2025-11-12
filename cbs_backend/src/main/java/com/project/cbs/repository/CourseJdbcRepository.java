@@ -1,7 +1,9 @@
 package com.project.cbs.repository;
 
 import com.project.cbs.dto.CourseDto;
+import com.project.cbs.dto.CourseScheduleDto;
 import com.project.cbs.entity.Course;
+import com.project.cbs.entity.CourseSchedule;
 import com.project.cbs.entity.Department;
 import com.project.cbs.entity.Instructor;
 
@@ -22,10 +24,9 @@ public class CourseJdbcRepository {
     private JdbcTemplate jdbcTemplate;
 
 
-    private final RowMapper<CourseDto> courseDtoRowMapper = (rs, rowNum) -> {
-    CourseDto dto = new CourseDto();
-    dto.setCourseName(rs.getString("course_name"));
-            dto.setCourseId(rs.getLong("course_id"));
+    private final RowMapper<CourseScheduleDto> courseScheduleDtoRowMapper = (rs, rowNum) -> {
+        CourseScheduleDto dto = new CourseScheduleDto();
+        dto.setCourseId(rs.getLong("course_id"));
         dto.setCourseName(rs.getString("course_name"));
         dto.setDepartmentName(rs.getString("department_name"));
         dto.setInstructorName(rs.getString("instructor_name"));
@@ -42,44 +43,44 @@ public class CourseJdbcRepository {
 };
 
 
-    public List<CourseDto> findAll() {
-        return jdbcTemplate.query("SELECT * FROM Course", courseDtoRowMapper);
-    }
+    // public List<CourseDto> findAll() {
+    //     return jdbcTemplate.query("SELECT * FROM Course", courseScheduleDtoRowMapper);
+    // }
 
-    public List<CourseDto> findAllWithNames() {
-   String sql = 
-    "SELECT " +
-    "  c.course_id, " +
-    "  c.name AS course_name, " +
-    "  d.name AS department_name, " +
-    "  i.name AS instructor_name, " +
-    "  cs.day AS day, " +
-    "  cs.time AS time, " +
-    "  cs.location AS location, " +
-    "  c.credits AS credits, " +
-    "  MIN(b.coins_spent) AS min_bid, " +
-    "  AVG(b.coins_spent) AS avg_bid, " +
-    "  c.capacity AS capacity, " +
-    "  COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0) AS enrolled, " +
-    "  (c.capacity - COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0)) AS seats " +
-    "FROM Course c " +
-    "JOIN Department d ON c.dept_id = d.dept_id " +
-    "JOIN Instructor i ON c.instructor_id = i.instructor_id " +
-    "LEFT JOIN Course_Schedule cs ON c.course_id = cs.course_id " +  // Changed to LEFT JOIN
-    "LEFT JOIN Bid b ON c.course_id = b.course_id " +
-    "GROUP BY c.course_id, c.name, d.name, i.name, cs.day, cs.time, cs.location, c.credits, c.capacity";
+//     public List<CourseDto> findAllWithNames() {
+//    String sql = 
+//     "SELECT " +
+//     "  c.course_id, " +
+//     "  c.name AS course_name, " +
+//     "  d.name AS department_name, " +
+//     "  i.name AS instructor_name, " +
+//     "  cs.day AS day, " +
+//     "  cs.time AS time, " +
+//     "  cs.location AS location, " +
+//     "  c.credits AS credits, " +
+//     "  MIN(b.coins_spent) AS min_bid, " +
+//     "  AVG(b.coins_spent) AS avg_bid, " +
+//     "  c.capacity AS capacity, " +
+//     "  COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0) AS enrolled, " +
+//     "  (c.capacity - COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0)) AS seats " +
+//     "FROM Course c " +
+//     "JOIN Department d ON c.dept_id = d.dept_id " +
+//     "JOIN Instructor i ON c.instructor_id = i.instructor_id " +
+//     "LEFT JOIN Course_Schedule cs ON c.course_id = cs.course_id " +  // Changed to LEFT JOIN
+//     "LEFT JOIN Bid b ON c.course_id = b.course_id " +
+//     "GROUP BY c.course_id, c.name, d.name, i.name, cs.day, cs.time, cs.location, c.credits, c.capacity";
 
 
         
-        return jdbcTemplate.query(sql, courseDtoRowMapper);
+//         return jdbcTemplate.query(sql, courseDtoRowMapper);
     
-}
+// }
 
 
-    public Optional<CourseDto> findById(Long id) {
-        List<CourseDto> results = jdbcTemplate.query("SELECT * FROM Course WHERE course_id = ?", courseDtoRowMapper, id);
-        return results.stream().findFirst();
-    }
+    // public Optional<CourseDto> findById(Long id) {
+    //     List<CourseDto> results = jdbcTemplate.query("SELECT * FROM Course WHERE course_id = ?", courseDtoRowMapper, id);
+    //     return results.stream().findFirst();
+    // }
 
     public int save(Course course) {
         String sql = "INSERT INTO Course (name, credits, capacity, dept_id, instructor_id) VALUES (?, ?, ?, ?, ?)";
@@ -97,10 +98,10 @@ public class CourseJdbcRepository {
         return jdbcTemplate.update("DELETE FROM Course WHERE course_id = ?", id);
     }
 
-    public List<CourseDto> search(String nameFilter) {
-        return jdbcTemplate.query("SELECT * FROM Course WHERE name LIKE ?",
-                courseDtoRowMapper, "%" + nameFilter + "%");
-    }
+    // public List<CourseDto> search(String nameFilter) {
+    //     return jdbcTemplate.query("SELECT * FROM Course WHERE name LIKE ?",
+    //             courseDtoRowMapper, "%" + nameFilter + "%");
+    // }
 
     public Optional<Integer> checkAvailability(Long id) {
         String sql =
@@ -108,4 +109,146 @@ public class CourseJdbcRepository {
         List<Integer> result = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getInt("available"), id, id);
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
+
+    public List<CourseScheduleDto> findAllCoursesWithDetails() {
+        String sql = 
+            "SELECT " +
+            "  c.course_id, " +
+            "  c.name AS course_name, " +
+            "  d.name AS department_name, " +
+            "  i.name AS instructor_name, " +
+            "  cs.day AS day, " +
+            "  cs.time AS time, " +
+            "  cs.location AS location, " +
+            "  c.credits AS credits, " +
+            "  MIN(b.coins_spent) AS min_bid, " +
+            "  AVG(b.coins_spent) AS avg_bid, " +
+            "  c.capacity AS capacity, " +
+            "  COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0) AS enrolled, " +
+            "  (c.capacity - COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0)) AS seats " +
+            "FROM Course c " +
+            "JOIN Department d ON c.dept_id = d.dept_id " +
+            "JOIN Instructor i ON c.instructor_id = i.instructor_id " +
+            "LEFT JOIN Course_Schedule cs ON c.course_id = cs.course_id " +
+            "LEFT JOIN Bid b ON c.course_id = b.course_id " +
+            "GROUP BY c.course_id, c.name, d.name, i.name, cs.day, cs.time, cs.location, c.credits, c.capacity";
+        
+        return jdbcTemplate.query(sql, courseScheduleDtoRowMapper);
+    }
+
+    // Get courses by department
+    public List<CourseScheduleDto> findCoursesByDepartment(Integer deptId) {
+        String sql = 
+            "SELECT " +
+            "  c.course_id, " +
+            "  c.name AS course_name, " +
+            "  d.name AS department_name, " +
+            "  i.name AS instructor_name, " +
+            "  cs.day AS day, " +
+            "  cs.time AS time, " +
+            "  cs.location AS location, " +
+            "  c.credits AS credits, " +
+            "  MIN(b.coins_spent) AS min_bid, " +
+            "  AVG(b.coins_spent) AS avg_bid, " +
+            "  c.capacity AS capacity, " +
+            "  COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0) AS enrolled, " +
+            "  (c.capacity - COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0)) AS seats " +
+            "FROM Course c " +
+            "JOIN Department d ON c.dept_id = d.dept_id " +
+            "JOIN Instructor i ON c.instructor_id = i.instructor_id " +
+            "LEFT JOIN Course_Schedule cs ON c.course_id = cs.course_id " +
+            "LEFT JOIN Bid b ON c.course_id = b.course_id " +
+            "WHERE c.dept_id = ? " +
+            "GROUP BY c.course_id, c.name, d.name, i.name, cs.day, cs.time, cs.location, c.credits, c.capacity";
+        
+        return jdbcTemplate.query(sql, courseScheduleDtoRowMapper, deptId);
+    }
+
+    // Get courses a student is enrolled in
+    public List<CourseScheduleDto> findEnrolledCoursesByStudent(Long studentId) {
+        String sql = 
+            "SELECT " +
+            "  c.course_id, " +
+            "  c.name AS course_name, " +
+            "  d.name AS department_name, " +
+            "  i.name AS instructor_name, " +
+            "  cs.day AS day, " +
+            "  cs.time AS time, " +
+            "  cs.location AS location, " +
+            "  c.credits AS credits, " +
+            "  MIN(b.coins_spent) AS min_bid, " +
+            "  AVG(b.coins_spent) AS avg_bid, " +
+            "  c.capacity AS capacity, " +
+            "  COALESCE((SELECT COUNT(*) FROM Enrollment e2 WHERE e2.course_id = c.course_id AND e2.status = 'enrolled'), 0) AS enrolled, " +
+            "  (c.capacity - COALESCE((SELECT COUNT(*) FROM Enrollment e2 WHERE e2.course_id = c.course_id AND e2.status = 'enrolled'), 0)) AS seats " +
+            "FROM Course c " +
+            "JOIN Department d ON c.dept_id = d.dept_id " +
+            "JOIN Instructor i ON c.instructor_id = i.instructor_id " +
+            "LEFT JOIN Course_Schedule cs ON c.course_id = cs.course_id " +
+            "LEFT JOIN Bid b ON c.course_id = b.course_id " +
+            "JOIN Enrollment e ON c.course_id = e.course_id " +
+            "WHERE e.student_id = ? AND e.status = 'enrolled' " +
+            "GROUP BY c.course_id, c.name, d.name, i.name, cs.day, cs.time, cs.location, c.credits, c.capacity";
+        
+        return jdbcTemplate.query(sql, courseScheduleDtoRowMapper, studentId);
+    }
+
+    // Get courses a student has bid on
+    public List<CourseScheduleDto> findCoursesWithBidsByStudent(Long studentId) {
+        String sql = 
+            "SELECT " +
+            "  c.course_id, " +
+            "  c.name AS course_name, " +
+            "  d.name AS department_name, " +
+            "  i.name AS instructor_name, " +
+            "  cs.day AS day, " +
+            "  cs.time AS time, " +
+            "  cs.location AS location, " +
+            "  c.credits AS credits, " +
+            "  MIN(b2.coins_spent) AS min_bid, " +
+            "  AVG(b2.coins_spent) AS avg_bid, " +
+            "  c.capacity AS capacity, " +
+            "  COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0) AS enrolled, " +
+            "  (c.capacity - COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0)) AS seats " +
+            "FROM Course c " +
+            "JOIN Department d ON c.dept_id = d.dept_id " +
+            "JOIN Instructor i ON c.instructor_id = i.instructor_id " +
+            "LEFT JOIN Course_Schedule cs ON c.course_id = cs.course_id " +
+            "LEFT JOIN Bid b2 ON c.course_id = b2.course_id " +
+            "JOIN Bid b ON c.course_id = b.course_id " +
+            "WHERE b.student_id = ? " +
+            "GROUP BY c.course_id, c.name, d.name, i.name, cs.day, cs.time, cs.location, c.credits, c.capacity";
+        
+        return jdbcTemplate.query(sql, courseScheduleDtoRowMapper, studentId);
+    }
+
+    // Get courses with available seats
+    public List<CourseScheduleDto> findAvailableCourses() {
+        String sql = 
+            "SELECT " +
+            "  c.course_id, " +
+            "  c.name AS course_name, " +
+            "  d.name AS department_name, " +
+            "  i.name AS instructor_name, " +
+            "  cs.day AS day, " +
+            "  cs.time AS time, " +
+            "  cs.location AS location, " +
+            "  c.credits AS credits, " +
+            "  MIN(b.coins_spent) AS min_bid, " +
+            "  AVG(b.coins_spent) AS avg_bid, " +
+            "  c.capacity AS capacity, " +
+            "  COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0) AS enrolled, " +
+            "  (c.capacity - COALESCE((SELECT COUNT(*) FROM Enrollment e WHERE e.course_id = c.course_id AND e.status = 'enrolled'), 0)) AS seats " +
+            "FROM Course c " +
+            "JOIN Department d ON c.dept_id = d.dept_id " +
+            "JOIN Instructor i ON c.instructor_id = i.instructor_id " +
+            "LEFT JOIN Course_Schedule cs ON c.course_id = cs.course_id " +
+            "LEFT JOIN Bid b ON c.course_id = b.course_id " +
+            "GROUP BY c.course_id, c.name, d.name, i.name, cs.day, cs.time, cs.location, c.credits, c.capacity " +
+            "HAVING seats > 0";
+        
+        return jdbcTemplate.query(sql, courseScheduleDtoRowMapper);
+    }
+
+    
 }

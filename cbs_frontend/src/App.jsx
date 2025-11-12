@@ -12,12 +12,10 @@ import Profile from './components/Profile/Profile';
 
 // Helper function to transform API response to app format
 const transformCourseData = (apiCourses) => {
-  // Group courses by courseId to handle multiple meeting days
   const courseMap = new Map();
   
   apiCourses.forEach(course => {
     if (!courseMap.has(course.courseId)) {
-      // First occurrence - create the course entry
       courseMap.set(course.courseId, {
         id: course.courseId,
         code: course.courseName.split(' ')[0] || course.courseName,
@@ -28,7 +26,7 @@ const transformCourseData = (apiCourses) => {
         minBid: course.minBid || 0,
         avgBid: course.avgBid || course.minBid || 0,
         category: course.departmentName,
-        rating: 4.5, // Default rating
+        rating: 4.5,
         schedule: `${course.day} ${course.time}`,
         popularity: course.enrolled / course.capacity > 0.7 ? 'high' : 
                    course.enrolled / course.capacity > 0.4 ? 'medium' : 'low',
@@ -38,7 +36,6 @@ const transformCourseData = (apiCourses) => {
         time: course.time
       });
     } else {
-      // Additional meeting day - add to days array
       const existingCourse = courseMap.get(course.courseId);
       if (!existingCourse.days.includes(course.day)) {
         existingCourse.days.push(course.day);
@@ -53,7 +50,7 @@ const transformCourseData = (apiCourses) => {
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentPage, setCurrentPage] = useState('login');
-  const [points, setPoints] = useState(1000);
+  const [points, setPoints] = useState(100); // Will be fetched from wallet API
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -71,19 +68,18 @@ const App = () => {
   const [isSignup, setIsSignup] = useState(false);
   
   const [userProfile, setUserProfile] = useState({
-    name: 'Alex Johnson',
-    email: 'alex.johnson@university.edu',
-    studentId: 'STU2024001',
-    major: 'Computer Science',
-    year: 'Junior',
-    phone: '+1 (555) 123-4567',
-    address: '123 Campus Drive, University City, ST 12345',
-    gpa: '3.85',
-    credits: '84'
+    name: '',
+    email: '',
+    studentId: '',
+    major: '',
+    year: '',
+    phone: '',
+    address: '',
+    gpa: '',
+    credits: ''
   });
   const [tempProfile, setTempProfile] = useState({...userProfile});
 
-  // Round system state
   const [currentRound, setCurrentRound] = useState(1);
   const [roundStatus, setRoundStatus] = useState('active');
   const [roundEndTime] = useState('2024-10-20T23:59:59');
@@ -94,7 +90,6 @@ const App = () => {
   const [coursesWon, setCoursesWon] = useState([]);
   const [coursesLost, setCoursesLost] = useState([]);
 
-  // API state
   const [courses, setCourses] = useState([]);
   const [categories, setCategories] = useState(['all']);
   const [loading, setLoading] = useState(false);
@@ -102,70 +97,148 @@ const App = () => {
 
   const [cart, setCart] = useState([]);
   const [myBids, setMyBids] = useState([]);
-  
-  const [registeredCourses, setRegisteredCourses] = useState([
-    {
-      id: 7, code: 'CS201', name: 'Data Structures', instructor: 'Dr. Lisa Martinez',
-      schedule: 'MWF 14:00-15:30', credits: 4, location: 'Tech Building 103', grade: 'A', status: 'ongoing'
-    },
-    {
-      id: 8, code: 'MATH180', name: 'Calculus II', instructor: 'Prof. Robert Chen',
-      schedule: 'TTh 10:00-11:30', credits: 4, location: 'Math Building 205', grade: 'B+', status: 'ongoing'
-    }
-  ]);
-
+  const [registeredCourses, setRegisteredCourses] = useState([]);
   const [waitlist, setWaitlist] = useState([]);
 
-  // Fetch courses from API
-  useEffect(() => {
-    const fetchCourses = async () => {
-      setLoading(true);
-      setError(null);
-      
-      try {
-        const token = localStorage.getItem('authToken');
-        const headers = {
-          'Content-Type': 'application/json',
-        };
-        
-        // Add authorization header if token exists
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const response = await fetch('http://localhost:8080/api/courses', {
-          headers
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('Fetched courses:', data); // Debug log
-        
-        const transformedCourses = transformCourseData(data);
-        console.log('Transformed courses:', transformedCourses); // Debug log
-        
-        setCourses(transformedCourses);
-        
-        // Extract unique categories
-        const uniqueCategories = ['all', ...new Set(data.map(course => course.departmentName))];
-        setCategories(uniqueCategories);
-        
-      } catch (err) {
-        console.error('Error fetching courses:', err);
-        setError('Failed to load courses. Please check if the backend server is running at http://localhost:8080');
-        setCourses([]);
-      } finally {
-        setLoading(false);
-      }
+  // Helper function to get auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('authToken');
+    return {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
     };
+  };
 
+  // Fetch all user-specific data after login
+  useEffect(() => {
     if (isLoggedIn) {
-      fetchCourses();
+      fetchUserProfile();
+      fetchUserWallet();
+      fetchAllCourses();
+      fetchMyEnrollments();
+      fetchMyBids();
     }
   }, [isLoggedIn]);
+
+  // Fetch user profile
+  const fetchUserProfile = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/students/me', {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setUserProfile({
+          name: data.name || '',
+          email: data.email || '',
+          studentId: data.studentId?.toString() || '',
+          major: data.department?.name || '',
+          year: data.year || '',
+          phone: data.phone || '',
+          address: data.address || '',
+          gpa: data.gpa || '',
+          credits: data.credits || ''
+        });
+        setTempProfile({...data});
+      }
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+    }
+  };
+
+  // Fetch user wallet balance
+  const fetchUserWallet = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/wallet/me', {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setPoints(data.balance || 100);
+      }
+    } catch (err) {
+      console.error('Error fetching wallet:', err);
+    }
+  };
+
+  // Fetch all courses
+  const fetchAllCourses = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('http://localhost:8080/api/courses', {
+        headers: getAuthHeaders()
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Fetched courses:', data);
+      
+      const transformedCourses = transformCourseData(data);
+      setCourses(transformedCourses);
+      
+      const uniqueCategories = ['all', ...new Set(data.map(course => course.departmentName))];
+      setCategories(uniqueCategories);
+      
+    } catch (err) {
+      console.error('Error fetching courses:', err);
+      setError('Failed to load courses. Please check if the backend server is running.');
+      setCourses([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch user's enrolled courses
+  const fetchMyEnrollments = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/courses/my-enrollments', {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const transformedEnrollments = transformCourseData(data).map(course => ({
+          ...course,
+          grade: 'A', // Default, can be fetched from enrollments table if available
+          status: 'ongoing'
+        }));
+        setRegisteredCourses(transformedEnrollments);
+      }
+    } catch (err) {
+      console.error('Error fetching enrollments:', err);
+    }
+  };
+
+  // Fetch user's bids
+  const fetchMyBids = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/courses/my-bids', {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Transform API bid data to app format
+        const transformedBids = data.map(course => ({
+          courseId: course.courseId,
+          amount: course.minBid || 0, // You'll need to fetch actual bid amount from bids API
+          status: 'active',
+          timestamp: 'Recent',
+          round: currentRound
+        }));
+        setMyBids(transformedBids);
+      }
+    } catch (err) {
+      console.error('Error fetching bids:', err);
+    }
+  };
 
   const filteredCourses = courses.filter(course => {
     const matchesSearch = course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -192,32 +265,29 @@ const App = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Login failed with status: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(errorText || `Login failed with status: ${response.status}`);
       }
 
       const data = await response.json();
       console.log('Login successful:', data);
       
-      // Store user data if returned from API
-      if (data.user) {
-        setUserProfile({
-          ...userProfile,
-          name: data.user.name || userProfile.name,
-          email: data.user.email || loginForm.email,
-          studentId: data.user.studentId || userProfile.studentId,
-          major: data.user.major || userProfile.major
-        });
-      }
-      
-      // Store token if provided
+      // Store token
       if (data.token) {
         localStorage.setItem('authToken', data.token);
       }
       
+      // Update user profile from login response
+      setUserProfile({
+        ...userProfile,
+        name: data.name || '',
+        email: data.email || loginForm.email,
+        studentId: data.studentId?.toString() || ''
+      });
+      
       setIsLoggedIn(true);
       setCurrentPage('home');
-      setLoginForm({ email: '', password: '' }); // Clear form
+      setLoginForm({ email: '', password: '' });
       
     } catch (err) {
       console.error('Login error:', err);
@@ -230,61 +300,11 @@ const App = () => {
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch('http://localhost:8080/api/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: signupForm.name,
-          email: signupForm.email,
-          password: signupForm.password,
-          studentId: signupForm.studentId,
-          major: signupForm.major
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Signup failed with status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Signup successful:', data);
-      
-      // Update user profile with signup data
-      setUserProfile({
-        ...userProfile,
-        name: signupForm.name,
-        email: signupForm.email,
-        studentId: signupForm.studentId,
-        major: signupForm.major
-      });
-      
-      // Store token if provided
-      if (data.token) {
-        localStorage.setItem('authToken', data.token);
-      }
-      
-      setIsLoggedIn(true);
-      setCurrentPage('home');
-      setSignupForm({ name: '', email: '', password: '', studentId: '', major: '' }); // Clear form
-      
-    } catch (err) {
-      console.error('Signup error:', err);
-      setError(err.message || 'Signup failed. Please try again.');
-      alert('Signup failed: ' + (err.message || 'Please check your information and try again.'));
-    } finally {
-      setLoading(false);
-    }
+    alert('Signup is not available. Please use existing credentials to login.');
+    // Signup endpoint not implemented in backend (fixed users only)
   };
 
   const handleLogout = () => {
-    // Clear stored token
     localStorage.removeItem('authToken');
     
     setIsLoggedIn(false);
@@ -295,6 +315,20 @@ const App = () => {
     setMyBids([]);
     setCoursesWon([]);
     setCoursesLost([]);
+    setRegisteredCourses([]);
+    setWaitlist([]);
+    setPoints(100);
+    setUserProfile({
+      name: '',
+      email: '',
+      studentId: '',
+      major: '',
+      year: '',
+      phone: '',
+      address: '',
+      gpa: '',
+      credits: ''
+    });
   };
 
   const handleAddToCart = (courseId, bidAmount) => {
@@ -344,7 +378,7 @@ const App = () => {
     ));
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (roundStatus === 'closed') {
       alert('Bidding is closed for this round!');
       return;
@@ -362,19 +396,32 @@ const App = () => {
       return;
     }
 
-    const newBids = cart.map(item => ({
-      courseId: item.courseId,
-      amount: item.bidAmount,
-      status: item.bidAmount >= courses.find(c => c.id === item.courseId).avgBid ? 'leading' : 'active',
-      timestamp: 'Just now',
-      round: currentRound
-    }));
+    try {
+      // Submit bids to backend
+      for (const item of cart) {
+        await fetch('http://localhost:8080/api/bids', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            courseId: item.courseId,
+            coinsSpent: item.bidAmount,
+            roundId: currentRound
+          })
+        });
+      }
 
-    setMyBids([...myBids, ...newBids]);
-    setPoints(points - totalBid);
-    setCart([]);
-    setShowCart(false);
-    alert('Successfully placed ' + newBids.length + ' bid(s) in Round ' + currentRound + '!\n\nYour bids are now active. Check "My Bids" to track their status.');
+      // Refresh data after successful checkout
+      await fetchMyBids();
+      await fetchUserWallet();
+      
+      setCart([]);
+      setShowCart(false);
+      alert('Successfully placed ' + cart.length + ' bid(s) in Round ' + currentRound + '!\n\nYour bids are now active. Check "My Bids" to track their status.');
+      
+    } catch (err) {
+      console.error('Checkout error:', err);
+      alert('Failed to place bids. Please try again.');
+    }
   };
 
   const handleAddToWaitlist = (courseId) => {
@@ -479,18 +526,16 @@ const App = () => {
         />
 
         <div className="flex-1 overflow-auto">
-          {/* Loading State */}
           {loading && (currentPage === 'browse' || currentPage === 'home') && (
             <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading courses from backend...</p>
+              <p className="text-gray-600">Loading data from backend...</p>
             </div>
           )}
 
-          {/* Error State */}
           {error && (currentPage === 'browse' || currentPage === 'home') && (
             <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
-              <p className="text-red-700 font-semibold mb-2">⚠️ Error Loading Courses</p>
+              <p className="text-red-700 font-semibold mb-2">⚠️ Error Loading Data</p>
               <p className="text-red-600 text-sm mb-4">{error}</p>
               <button
                 onClick={() => window.location.reload()}
@@ -501,7 +546,6 @@ const App = () => {
             </div>
           )}
 
-          {/* Demo Button */}
           {!loading && !error && myBids.length > 0 && currentRound <= 2 && (
             <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
               <p className="text-sm text-amber-800 mb-2">
