@@ -83,7 +83,6 @@
 			<scope>annotationProcessor</scope>
 		</dependency>
 
-		<dependencies>
     <!-- JWT -->
     	<dependency>
     	    <groupId>io.jsonwebtoken</groupId>
@@ -108,7 +107,6 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-security</artifactId>
     </dependency>
-</dependencies>
 
         
         <!-- Spring Boot DevTools -->
