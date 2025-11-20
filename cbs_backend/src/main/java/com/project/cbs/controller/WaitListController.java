@@ -4,7 +4,7 @@ import com.project.cbs.dto.WaitlistDto;
 import com.project.cbs.model.Course;
 import com.project.cbs.model.Waitlist;
 import com.project.cbs.repository.CourseRepository;
-import com.project.cbs.repository.WaitlistRepository;
+import com.project.cbs.repository.WaitListRepository;
 import com.project.cbs.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,9 +19,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "http://localhost:5173")
-public class WaitlistController {
+public class WaitListController {
 
-    private final WaitlistRepository waitlistRepository;
+    private final WaitListRepository waitlistRepository;
     private final CourseRepository courseRepository;
     private final JwtUtil jwtUtil;
 

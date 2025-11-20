@@ -22,7 +22,7 @@ public class RoundServiceImpl implements RoundService {
     private final EnrollmentRepository enrollmentRepository;
     private final WalletRepository walletRepository;
     private final NotificationService notificationService;
-    private final WaitlistRepository waitlistRepository;
+    private final WaitListRepository waitlistRepository;
 
     @Override
     public List<RoundDto> getAllRounds() {
