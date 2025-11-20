@@ -68,10 +68,10 @@ Frontend will run on `http://localhost:5173`
 
 **Admin:**
 - Email: admin@nyu.edu
-- Password: admin123
+- Password: adminpass
 
 **Student:**
-- Email: alice.johnson@nyu.edu
+- Email: alice@nyu.edu
 - Password: password123
 
 ## Project Structure
