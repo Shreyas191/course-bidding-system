@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import LoginPage from './components/Auth/LoginPage';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import Header from './components/Layout/Header';
@@ -13,39 +15,37 @@ import Profile from './components/Profile/Profile';
 
 // Helper function to transform API response to app format
 const transformCourseData = (apiCourses) => {
-  const courseMap = new Map();
-  
-  apiCourses.forEach(course => {
-    if (!courseMap.has(course.courseId)) {
-      courseMap.set(course.courseId, {
-        id: course.courseId,
-        code: course.courseName.split(' ')[0] || course.courseName,
-        name: course.courseName,
-        instructor: course.instructorName,
-        seats: course.capacity,
-        enrolled: course.enrolled,
-        minBid: course.minBid || 0,
-        avgBid: course.avgBid || course.minBid || 0,
-        category: course.departmentName,
-        rating: 4.5,
-        schedule: `${course.day} ${course.time}`,
-        popularity: course.enrolled / course.capacity > 0.7 ? 'high' : 
-                   course.enrolled / course.capacity > 0.4 ? 'medium' : 'low',
-        credits: course.credits,
-        location: course.location,
-        days: [course.day],
-        time: course.time
-      });
-    } else {
-      const existingCourse = courseMap.get(course.courseId);
-      if (!existingCourse.days.includes(course.day)) {
-        existingCourse.days.push(course.day);
-        existingCourse.schedule = `${existingCourse.days.join('/')} ${course.time}`;
-      }
-    }
+  return apiCourses.map(course => {
+    // Format schedule from array of ScheduleDto objects
+    const scheduleStr = course.schedule && course.schedule.length > 0
+      ? course.schedule.map(s => `${s.dayOfWeek} ${s.startTime}-${s.endTime}`).join(', ')
+      : 'TBD';
+    
+    // Get location from first schedule entry
+    const location = course.schedule && course.schedule.length > 0
+      ? course.schedule[0].location
+      : 'TBD';
+    
+    return {
+      id: course.courseId,
+      code: course.courseCode,
+      name: course.courseName,
+      instructor: course.instructorName,
+      seats: course.capacity,
+      enrolled: course.enrolled,
+      minBid: course.minBid || 0,
+      avgBid: course.minBid || 0, // For now, same as minBid
+      category: course.departmentName,
+      rating: 4.5,
+      schedule: scheduleStr,
+      popularity: course.enrolled / course.capacity > 0.7 ? 'high' : 
+                 course.enrolled / course.capacity > 0.4 ? 'medium' : 'low',
+      credits: course.credits,
+      location: location,
+      description: course.description,
+      prerequisites: course.prerequisites
+    };
   });
-  
-  return Array.from(courseMap.values());
 };
 
 const App = () => {
@@ -60,14 +60,6 @@ const App = () => {
   const [showCart, setShowCart] = useState(false);
   
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-  const [signupForm, setSignupForm] = useState({ 
-    name: '', 
-    email: '', 
-    password: '', 
-    studentId: '',
-    major: ''
-  });
-  const [isSignup, setIsSignup] = useState(false);
   
   const [userProfile, setUserProfile] = useState({
     name: '',
@@ -80,6 +72,8 @@ const App = () => {
     gpa: '',
     credits: ''
   });
+
+  const [allRounds, setAllRounds] = useState([]);
   const [tempProfile, setTempProfile] = useState({...userProfile});
 
   const [currentRound, setCurrentRound] = useState(1);
@@ -111,15 +105,31 @@ const App = () => {
     };
   };
 
-  // Fetch all user-specific data after login (only for students)
+  // Check if user is already logged in (on page load/refresh)
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    const isAdminStored = localStorage.getItem('isAdmin') === 'true';
+    
+    if (token) {
+      // Token exists, user was logged in before
+      setIsLoggedIn(true);
+      setIsAdmin(isAdminStored);
+      setCurrentPage(isAdminStored ? 'admin' : 'home');
+    }
+  }, []); // Empty dependency array = runs only once on mount
+
+  // Auto-fetch data when logged in
   useEffect(() => {
     if (isLoggedIn && !isAdmin) {
       fetchUserProfile();
       fetchUserWallet();
+      fetchAllRounds();
       fetchAllCourses();
       fetchMyEnrollments();
       fetchMyBids();
+      fetchMyWaitlist();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, isAdmin]);
 
   // Fetch user profile
@@ -135,14 +145,18 @@ const App = () => {
           name: data.name || '',
           email: data.email || '',
           studentId: data.studentId?.toString() || '',
-          major: data.department?.name || '',
-          year: data.year || '',
-          phone: data.phone || '',
-          address: data.address || '',
-          gpa: data.gpa || '',
-          credits: data.credits || ''
+          major: data.department || '',  // Backend returns department name
+          year: data.year?.toString() || '',
+          phone: '',
+          address: '',
+          gpa: '',
+          credits: ''
         });
-        setTempProfile({...data});
+        // Update points from the profile response
+        if (data.bidPoints !== undefined) {
+          setPoints(data.bidPoints);
+        }
+        setTempProfile({...userProfile, ...data});
       }
     } catch (err) {
       console.error('Error fetching profile:', err);
@@ -162,6 +176,22 @@ const App = () => {
       }
     } catch (err) {
       console.error('Error fetching wallet:', err);
+    }
+  };
+
+  // Fetch all rounds
+  const fetchAllRounds = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/rounds', {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAllRounds(data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching rounds:', err);
     }
   };
 
@@ -221,23 +251,31 @@ const App = () => {
   // Fetch user's bids
   const fetchMyBids = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/courses/my-bids', {
+      const response = await fetch('http://localhost:8080/api/bids/my-bids', {
         headers: getAuthHeaders()
       });
       
       if (response.ok) {
         const data = await response.json();
-        const transformedBids = data.map(course => ({
-          courseId: course.courseId,
-          amount: course.minBid || 0,
-          status: 'active',
-          timestamp: 'Recent',
-          round: currentRound
-        }));
-        setMyBids(transformedBids);
+        setMyBids(data || []);
       }
     } catch (err) {
       console.error('Error fetching bids:', err);
+    }
+  };
+
+  const fetchMyWaitlist = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/waitlist/my-waitlist', {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setWaitlist(data || []);
+      }
+    } catch (err) {
+      console.error('Error fetching waitlist:', err);
     }
   };
 
@@ -296,6 +334,10 @@ const App = () => {
           email: data.email || loginForm.email,
           studentId: data.studentId?.toString() || ''
         });
+        
+        // Fetch full profile and wallet data
+        fetchUserProfile();
+        fetchUserWallet();
       }
       
       setIsLoggedIn(true);
@@ -311,10 +353,7 @@ const App = () => {
     }
   };
 
-  const handleSignup = async (e) => {
-    e.preventDefault();
-    alert('Signup is not available. Please use existing credentials to login.');
-  };
+
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
@@ -411,20 +450,36 @@ const App = () => {
     }
 
     try {
+      console.log('Starting checkout process...');
+      console.log('Cart items:', cart);
+      console.log('Current round:', currentRound);
+      
       // Submit bids to backend
       for (const item of cart) {
-        await fetch('http://localhost:8080/api/bids', {
+        const bidData = {
+          courseId: item.courseId,
+          bidAmount: item.bidAmount
+        };
+        console.log('Submitting bid:', bidData);
+        
+        const response = await fetch('http://localhost:8080/api/bids', {
           method: 'POST',
           headers: getAuthHeaders(),
-          body: JSON.stringify({
-            courseId: item.courseId,
-            coinsSpent: item.bidAmount,
-            roundId: currentRound
-          })
+          body: JSON.stringify(bidData)
         });
+        
+        if (!response.ok) {
+          const error = await response.text();
+          console.error('Bid submission failed:', error);
+          throw new Error('Failed to submit bid: ' + error);
+        }
+        
+        const result = await response.json();
+        console.log('Bid created:', result);
       }
 
       // Refresh data after successful checkout
+      console.log('Fetching updated bids...');
       await fetchMyBids();
       await fetchUserWallet();
       
@@ -504,12 +559,7 @@ const App = () => {
       <LoginPage
         loginForm={loginForm}
         setLoginForm={setLoginForm}
-        signupForm={signupForm}
-        setSignupForm={setSignupForm}
-        isSignup={isSignup}
-        setIsSignup={setIsSignup}
         handleLogin={handleLogin}
-        handleSignup={handleSignup}
       />
     );
   }
@@ -581,7 +631,7 @@ const App = () => {
             </div>
           )}
 
-          {!loading && !error && currentPage === 'home' && (
+          {currentPage === 'home' && (
             <Home
               cart={cart}
               courses={courses}
@@ -597,6 +647,8 @@ const App = () => {
               round2EndDate={round2EndDate}
               coursesWon={coursesWon}
               coursesLost={coursesLost}
+              userProfile={userProfile}
+              allRounds={allRounds}
             />
           )}
 
@@ -663,6 +715,20 @@ const App = () => {
         handleCheckout={handleCheckout}
         currentRound={currentRound}
         roundStatus={roundStatus}
+      />
+
+      {/* Toast Notifications */}
+      <ToastContainer
+        position="top-right"
+        autoClose={5000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
       />
     </div>
   );

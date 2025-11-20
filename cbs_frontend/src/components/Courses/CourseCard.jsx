@@ -51,6 +51,12 @@ const CourseCard = ({ course, myBid, wonInRound1, handleAddToWaitlist, handleAdd
           </div>
         </div>
 
+        {course.description && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-xl">
+            <p className="text-sm text-gray-700">{course.description}</p>
+          </div>
+        )}
+
         <div className="mb-4">
           <div className="flex justify-between text-sm mb-2">
             <span className="text-gray-600 flex items-center gap-1">

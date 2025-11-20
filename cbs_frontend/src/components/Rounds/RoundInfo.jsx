@@ -1,22 +1,63 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, Calendar, TrendingUp } from 'lucide-react';
 
-const RoundInfo = ({ currentRound, roundStatus, roundEndTime }) => {
-  const formatTimeRemaining = (endTime) => {
+const RoundInfo = ({ allRounds, currentRound, roundStatus, roundEndTime }) => {
+  const [timeDisplay, setTimeDisplay] = useState('');
+  const [timerLabel, setTimerLabel] = useState('Time Left');
+
+  const formatTimeRemaining = (targetTime, isPending = false) => {
     const now = new Date();
-    const end = new Date(endTime);
-    const diff = end - now;
+    const target = new Date(targetTime);
+    const diff = target - now;
     
-    if (diff <= 0) return 'Ended';
+    if (diff <= 0) {
+      if (isPending) return 'Starting...';
+      return 'Ended';
+    }
     
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
     
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    return `${minutes}m ${seconds}s`;
   };
+
+  useEffect(() => {
+    const updateTimer = () => {
+      // Find current round info from allRounds
+      const activeRound = allRounds?.find(r => r.roundId === currentRound);
+      
+      if (!activeRound) {
+        setTimeDisplay('Loading...');
+        return;
+      }
+
+      if (roundStatus === 'pending' || activeRound.status === 'pending') {
+        // Round hasn't started yet - show countdown to start
+        setTimerLabel('Starts In');
+        setTimeDisplay(formatTimeRemaining(activeRound.startTime, true));
+      } else if (roundStatus === 'active' || activeRound.status === 'active') {
+        // Round is active - show countdown to end
+        setTimerLabel('Ends In');
+        setTimeDisplay(formatTimeRemaining(activeRound.endTime || roundEndTime, false));
+      } else {
+        // Round has ended
+        setTimerLabel('Status');
+        setTimeDisplay('Closed');
+      }
+    };
+
+    // Initial update
+    updateTimer();
+
+    // Update every second
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [allRounds, currentRound, roundStatus, roundEndTime]);
 
   return (
     <div className="bg-white rounded-3xl shadow-lg p-6">
@@ -28,9 +69,11 @@ const RoundInfo = ({ currentRound, roundStatus, roundEndTime }) => {
         <div className={`px-4 py-2 rounded-xl font-semibold ${
           roundStatus === 'active' 
             ? 'bg-emerald-100 text-emerald-700' 
+            : roundStatus === 'pending'
+            ? 'bg-amber-100 text-amber-700'
             : 'bg-rose-100 text-rose-700'
         }`}>
-          {roundStatus === 'active' ? '● Active' : '● Closed'}
+          {roundStatus === 'active' ? '● Active' : roundStatus === 'pending' ? '● Pending' : '● Closed'}
         </div>
       </div>
 
@@ -53,8 +96,8 @@ const RoundInfo = ({ currentRound, roundStatus, roundEndTime }) => {
               <Clock className="w-5 h-5 text-purple-600" />
             </div>
             <div>
-              <p className="text-xs text-gray-600">Time Left</p>
-              <p className="text-2xl font-bold text-gray-800">{formatTimeRemaining(roundEndTime)}</p>
+              <p className="text-xs text-gray-600">{timerLabel}</p>
+              <p className="text-2xl font-bold text-gray-800">{timeDisplay}</p>
             </div>
           </div>
         </div>
@@ -80,6 +123,14 @@ const RoundInfo = ({ currentRound, roundStatus, roundEndTime }) => {
             <strong>💡 Tip:</strong> {currentRound === 1 
               ? 'Start with strategic bids. You can adjust them in Round 2 based on competition.'
               : 'This is your final chance! Make sure to place your best bids before time runs out.'}
+          </p>
+        </div>
+      )}
+
+      {roundStatus === 'pending' && (
+        <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-100">
+          <p className="text-sm text-amber-800">
+            <strong>⏳ Round Starts Soon:</strong> Get ready! The bidding round will start automatically at the scheduled time.
           </p>
         </div>
       )}

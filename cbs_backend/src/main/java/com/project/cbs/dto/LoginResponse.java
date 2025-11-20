@@ -15,6 +15,7 @@ public class LoginResponse {
         this.studentId = studentId;
         this.email = email;
         this.name = name;
+        this.role = role;
     }
 
     // Getters and Setters

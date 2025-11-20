@@ -1,0 +1,21 @@
+# Backend
+cbs_backend/target/
+cbs_backend/.mvn/wrapper/maven-wrapper.jar
+cbs_backend/HELP.md
+
+# Frontend
+cbs_frontend/node_modules
+cbs_frontend/dist
+cbs_frontend/dist-ssr
+cbs_frontend/*.local
+
+# IDE
+.idea
+.vscode/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+
+# Logs
+*.log

@@ -1,16 +1,98 @@
 package com.project.cbs.controller;
 
+import com.project.cbs.dto.BidRequestDto;
+import com.project.cbs.dto.BidResponseDto;
+import com.project.cbs.service.BidService;
+import com.project.cbs.service.RoundService;
+import com.project.cbs.util.JwtUtil;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/bids")
-@CrossOrigin(origins = "*")
+@RequiredArgsConstructor
+@Slf4j
+@CrossOrigin(origins = "http://localhost:5173")
 public class BidController {
-	// TODO: Implement bid-related endpoints
-    // - POST /api/bids - Place a bid
-    // - GET /api/bids/student/{studentId} - Get bids by student
-    // - GET /api/bids/course/{courseId} - Get bids for course
-    // - GET /api/bids/round/{roundId} - Get bids for round
-    // - PUT /api/bids/{id} - Update bid
-    // - DELETE /api/bids/{id} - Cancel bid
+
+    private final BidService bidService;
+    private final RoundService roundService;
+    private final JwtUtil jwtUtil;
+
+    @PostMapping
+    public ResponseEntity<?> placeBid(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody BidRequestDto request
+    ) {
+        try {
+            String token = authHeader.substring(7);
+            String email = jwtUtil.extractEmail(token);
+            Long studentId = jwtUtil.extractStudentId(token);
+            
+            // Get current active round
+            var currentRound = roundService.getCurrentRound();
+            if (currentRound == null) {
+                return ResponseEntity.badRequest().body("No active round");
+            }
+            
+            BidResponseDto bid = bidService.placeBid(studentId, request, currentRound.getRoundId());
+            log.info("Bid placed successfully by student {}", studentId);
+            return ResponseEntity.ok(bid);
+        } catch (Exception e) {
+            log.error("Error placing bid: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/my-bids")
+    public ResponseEntity<?> getMyBids(@RequestHeader("Authorization") String authHeader) {
+        try {
+            String token = authHeader.substring(7);
+            Long studentId = jwtUtil.extractStudentId(token);
+            
+            List<BidResponseDto> bids = bidService.getMyBids(studentId);
+            return ResponseEntity.ok(bids);
+        } catch (Exception e) {
+            log.error("Error fetching bids: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/my-bids/round/{roundId}")
+    public ResponseEntity<?> getMyBidsByRound(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable Integer roundId
+    ) {
+        try {
+            String token = authHeader.substring(7);
+            Long studentId = jwtUtil.extractStudentId(token);
+            
+            List<BidResponseDto> bids = bidService.getMyBidsByRound(studentId, roundId);
+            return ResponseEntity.ok(bids);
+        } catch (Exception e) {
+            log.error("Error fetching bids: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{bidId}")
+    public ResponseEntity<?> cancelBid(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable Long bidId
+    ) {
+        try {
+            String token = authHeader.substring(7);
+            Long studentId = jwtUtil.extractStudentId(token);
+            
+            bidService.cancelBid(bidId, studentId);
+            return ResponseEntity.ok("Bid cancelled successfully");
+        } catch (Exception e) {
+            log.error("Error cancelling bid: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

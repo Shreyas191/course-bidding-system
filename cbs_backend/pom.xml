@@ -27,38 +27,40 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>21</java.version>
+		<java.version>17</java.version>
 	</properties>
 	<dependencies>
+		<!-- Spring Boot JDBC (NO JPA) -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa</artifactId>
+			<artifactId>spring-boot-starter-jdbc</artifactId>
 		</dependency>
+		
+		<!-- Spring Boot Security -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
+		
+		<!-- Spring Boot Web -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 
-		<dependency>
-			<groupId>com.h2database</groupId>
-			<artifactId>h2</artifactId>
-			<scope>runtime</scope>
-		</dependency>
+		<!-- WebSocket for real-time notifications -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-test</artifactId>
-			<scope>test</scope>
+			<artifactId>spring-boot-starter-websocket</artifactId>
 		</dependency>
+
+		<!-- MySQL Connector -->
 		<dependency>
-			<groupId>org.springframework.security</groupId>
-			<artifactId>spring-security-test</artifactId>
-			<scope>test</scope>
+    		<groupId>com.mysql</groupId>
+    		<artifactId>mysql-connector-j</artifactId>
+    		<scope>runtime</scope>
 		</dependency>
-		
+
 		<!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
@@ -77,50 +79,26 @@
             <version>0.11.5</version>
             <scope>runtime</scope>
         </dependency>
+        
+		<!-- Lombok -->
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<scope>annotationProcessor</scope>
+			<optional>true</optional>
 		</dependency>
 
-    <!-- JWT -->
-    	<dependency>
-    	    <groupId>io.jsonwebtoken</groupId>
-    	    <artifactId>jjwt-api</artifactId>
-    	    <version>0.11.5</version>
-    	</dependency>
-    	<dependency>
-    	    <groupId>io.jsonwebtoken</groupId>
-    	    <artifactId>jjwt-impl</artifactId>
-    	    <version>0.11.5</version>
-    	    <scope>runtime</scope>
-    	</dependency>
-    	<dependency>
-    	    <groupId>io.jsonwebtoken</groupId>
-    	    <artifactId>jjwt-jackson</artifactId>
-    	    <version>0.11.5</version>
-    	    <scope>runtime</scope>
-    	</dependency>
-    
-    <!-- Spring Security -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-security</artifactId>
-    </dependency>
-
-        
-        <!-- Spring Boot DevTools -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-devtools</artifactId>
-            <scope>runtime</scope>
-            <optional>true</optional>
-        </dependency>
-
+		<!-- Spring Boot Test -->
 		<dependency>
-    		<groupId>mysql</groupId>
-    		<artifactId>mysql-connector-java</artifactId>
-    		<version>8.0.33</version>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		
+		<!-- Spring Security Test -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-test</artifactId>
+			<scope>test</scope>
 		</dependency>
 
 

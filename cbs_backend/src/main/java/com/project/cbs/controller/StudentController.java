@@ -1,11 +1,15 @@
 package com.project.cbs.controller;
 
-import com.project.cbs.entity.Student;
-import com.project.cbs.repository.StudentJdbcRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-import java.util.List;
-import java.util.Optional;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.project.cbs.dto.StudentProfileDto;
+import com.project.cbs.service.StudentServiceImpl;
 
 @RestController
 @RequestMapping("/api/students")
@@ -13,38 +17,16 @@ import java.util.Optional;
 public class StudentController {
 
     @Autowired
-    private StudentJdbcRepository studentRepository;
+    private StudentServiceImpl studentService;
 
-    @GetMapping
-    public List<Student> getAllStudents() {
-        return studentRepository.findAll();
-    }
-
-    @GetMapping("/{id}")
-    public Optional<Student> getStudentById(@PathVariable Long id) {
-        return studentRepository.findById(id);
-    }
-
-    @PostMapping
-    public String createStudent(@RequestBody Student student) {
-        int rows = studentRepository.save(student);
-        return rows > 0 ? "Student created successfully" : "Error creating student";
-    }
-
-    @PutMapping("/{id}")
-    public String updateStudent(@PathVariable Long id, @RequestBody Student student) {
-        int rows = studentRepository.update(id, student);
-        return rows > 0 ? "Student updated successfully" : "Error updating student";
-    }
-
-    @DeleteMapping("/{id}")
-    public String deleteStudent(@PathVariable Long id) {
-        int rows = studentRepository.delete(id);
-        return rows > 0 ? "Student deleted successfully" : "Error deleting student";
-    }
-
-    @GetMapping("/{id}/profile")
-    public Optional<Student> getStudentProfile(@PathVariable Long id) {
-        return studentRepository.findProfileById(id);
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentStudentProfile(@RequestHeader("Authorization") String authHeader) {
+        try {
+            String email = studentService.extractEmailFromToken(authHeader);
+            StudentProfileDto profile = studentService.getStudentProfile(email);
+            return ResponseEntity.ok(profile);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error fetching profile: " + e.getMessage());
+        }
     }
 }
