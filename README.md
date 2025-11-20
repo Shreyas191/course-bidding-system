@@ -1,69 +1,85 @@
-# React + Vite
+# Course Bidding System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A web-based course bidding system that allows students to bid on courses using allocated points across multiple bidding rounds. Students can browse available courses, place bids, track their bidding status, and view enrolled courses. Administrators can manage courses, students, bidding rounds, and monitor system activity.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+**Backend:**
+- Java 17
+- Spring Boot 3.5.7
+- MySQL 8.0
+- Maven 3.9.x
 
-## React Compiler
+**Frontend:**
+- React 18
+- Vite 7.2.2
+- Node.js 18.x or higher
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Setup Instructions
 
-## Expanding the ESLint configuration
+### Prerequisites
+- Java 17 or higher
+- Node.js 18.x or higher
+- MySQL 8.0 or higher
+- Maven 3.9.x or higher
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Shreyas191/course-bidding-system.git
+cd course-bidding-system
+```
 
+### 2. Database Setup
+```sql
+CREATE DATABASE course_registration;
+```
 
-Tailwind V3
-# Stop the dev server (Ctrl + C)
+import database into MySQL
 
-# Uninstall v4
-npm uninstall tailwindcss
+### 3. Backend Setup
+```bash
+cd cbs_backend
+```
 
-# Install v3
-npm install -D tailwindcss@3.4.1 postcss autoprefixer
+Update `src/main/resources/application.properties` with your MySQL credentials:
+```properties
+spring.datasource.url=jdbc:mysql://localhost:3306/course_registration
+spring.datasource.username=your_username
+spring.datasource.password=your_password
+```
 
-#Create tailwind.config.js:
-cat > tailwind.config.js << 'EOF'
-/** @type {import('tailwindcss').Config} */
-export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-}
-EOF
+Start the backend server:
+```bash
+mvnw.cmd spring-boot:run
+```
 
-#Create postcss.config.js
-cat > postcss.config.js << 'EOF'
-export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-}
-EOF
+Backend will run on `http://localhost:8080`
 
-#Update src/index.css:
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-#Restart:
-# Clear the cache
-rm -rf node_modules/.vite
-
-# Start the server
+### 4. Frontend Setup (open new terminal)
+```bash
+cd cbs_frontend
+npm install
 npm run dev
+```
+
+Frontend will run on `http://localhost:5173`
+
+## Default Login Credentials
+
+**Admin:**
+- Email: admin@nyu.edu
+- Password: admin123
+
+**Student:**
+- Email: alice.johnson@nyu.edu
+- Password: password123
+
+## Project Structure
+```
+course-bidding-system/
+├── cbs_backend/          # Spring Boot backend
+│   └── src/main/java/
+└── cbs_frontend/         # React frontend
+    └── src/
+```
+

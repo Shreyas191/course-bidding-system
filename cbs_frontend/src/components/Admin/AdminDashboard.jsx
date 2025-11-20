@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, BookOpen, TrendingUp, DollarSign, Plus, Edit2, Trash2, 
-  Search, X, Save, CheckCircle, AlertCircle, LogOut, Home as HomeIcon
+  Search, X, Save, CheckCircle, AlertCircle, LogOut, Home as HomeIcon,
+  Calendar, Clock, MapPin, Eye
 } from 'lucide-react';
 
 const AdminDashboard = ({ handleLogout }) => {
@@ -10,46 +11,162 @@ const AdminDashboard = ({ handleLogout }) => {
   const [courses, setCourses] = useState([]);
   const [students, setStudents] = useState([]);
   const [bids, setBids] = useState([]);
+  const [rounds, setRounds] = useState([]);
+  const [selectedRound, setSelectedRound] = useState(null);
+  const [roundBids, setRoundBids] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date());
   
   // Modal states
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [showStudentModal, setShowStudentModal] = useState(false);
+  const [showRoundModal, setShowRoundModal] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [editingRound, setEditingRound] = useState(null);
   
   const [courseForm, setCourseForm] = useState({
     courseName: '',
-    departmentName: '',
+    courseCode: '',
+    deptId: 1,
     instructorName: '',
-    day: '',
-    time: '',
-    location: '',
-    credits: '',
-    minBid: '',
-    capacity: ''
+    credits: 3,
+    minBid: 50,
+    capacity: 30,
+    description: '',
+    prerequisites: '',
+    dayOfWeek: 'Monday',
+    startTime: '09:00',
+    endTime: '12:00',
+    location: ''
   });
   
   const [studentForm, setStudentForm] = useState({
     name: '',
     email: '',
     password: '',
-    studentId: '',
-    major: '',
-    year: '',
-    points: '1000'
+    role: 'student',
+    year: 1,
+    deptId: 1
+  });
+
+  const [roundForm, setRoundForm] = useState({
+    roundNumber: 1,
+    roundName: '',
+    startTime: '',
+    endTime: '',
+    status: 'pending'
   });
 
   const token = localStorage.getItem('authToken');
+
+  // Helper function to format time (remove seconds)
+  const formatTime = (time) => {
+    if (!time) return '';
+    return time.substring(0, 5); // Convert "HH:mm:ss" to "HH:mm"
+  };
+
+  // Fetch departments on mount
+  useEffect(() => {
+    fetchDepartments();
+    // Fetch all data for overview stats
+    fetchCourses();
+    fetchStudents();
+    fetchBids();
+  }, []);
+
+  // Real-time clock update every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Fetch all data
   useEffect(() => {
     if (currentTab === 'courses') fetchCourses();
     else if (currentTab === 'students') fetchStudents();
-    else if (currentTab === 'bids') fetchBids();
+    else if (currentTab === 'bids') fetchRounds();
   }, [currentTab]);
+
+  // Helper function to get round status based on real-time
+  const getRoundStatus = (round) => {
+    const now = currentTime;
+    const startTime = round.startTime ? new Date(round.startTime) : null;
+    const endTime = round.endTime ? new Date(round.endTime) : null;
+
+    if (!startTime || !endTime) {
+      return { status: 'pending', label: 'Not Started', color: 'bg-gray-500' };
+    }
+
+    // If already processed, show as closed
+    if (round.status === 'closed' || round.processedAt) {
+      return { status: 'closed', label: 'Closed', color: 'bg-gray-500' };
+    }
+
+    if (now < startTime) {
+      return { status: 'pending', label: 'Not Started', color: 'bg-yellow-500' };
+    } else if (now >= startTime && now < endTime) {
+      return { status: 'active', label: 'Active', color: 'bg-green-500' };
+    } else {
+      return { status: 'completed', label: 'Completed', color: 'bg-blue-500' };
+    }
+  };
+
+  // Helper function to calculate countdown
+  const getCountdown = (round) => {
+    const now = currentTime;
+    const startTime = round.startTime ? new Date(round.startTime) : null;
+    const endTime = round.endTime ? new Date(round.endTime) : null;
+
+    if (!startTime || !endTime) return 'Time not set';
+
+    let targetTime, prefix;
+    
+    if (now < startTime) {
+      targetTime = startTime;
+      prefix = 'Starts in: ';
+    } else if (now >= startTime && now < endTime) {
+      targetTime = endTime;
+      prefix = 'Ends in: ';
+    } else {
+      return 'Ended';
+    }
+
+    const diff = targetTime - now;
+    if (diff <= 0) return 'Starting now...';
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    let timeStr = '';
+    if (days > 0) timeStr += `${days}d `;
+    if (hours > 0 || days > 0) timeStr += `${hours}h `;
+    if (minutes > 0 || hours > 0 || days > 0) timeStr += `${minutes}m `;
+    timeStr += `${seconds}s`;
+
+    return prefix + timeStr;
+  };
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/departments', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDepartments(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch departments:', err);
+    }
+  };
 
   const fetchCourses = async () => {
     setLoading(true);
@@ -69,7 +186,7 @@ const AdminDashboard = ({ handleLogout }) => {
   const fetchStudents = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/students', {
+      const response = await fetch('http://localhost:8080/api/admin/students', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -84,7 +201,7 @@ const AdminDashboard = ({ handleLogout }) => {
   const fetchBids = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/bids', {
+      const response = await fetch('http://localhost:8080/api/admin/bids', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -96,10 +213,41 @@ const AdminDashboard = ({ handleLogout }) => {
     }
   };
 
+  const fetchRounds = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('http://localhost:8080/api/admin/rounds', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      setRounds(data);
+    } catch (err) {
+      setError('Failed to fetch rounds');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchRoundBids = async (roundId) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/rounds/${roundId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      setSelectedRound(data);
+      setRoundBids(data.bids || []);
+    } catch (err) {
+      setError('Failed to fetch round bids');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Course CRUD operations
   const handleAddCourse = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/courses', {
+      const response = await fetch('http://localhost:8080/api/admin/courses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -112,8 +260,8 @@ const AdminDashboard = ({ handleLogout }) => {
         alert('Course added successfully!');
         setShowCourseModal(false);
         setCourseForm({
-          courseName: '', departmentName: '', instructorName: '',
-          day: '', time: '', location: '', credits: '', minBid: '', capacity: ''
+          courseName: '', courseCode: '', deptId: 1, instructorName: '',
+          credits: 3, minBid: 50, capacity: 30, description: '', prerequisites: ''
         });
         fetchCourses();
       } else {
@@ -126,13 +274,19 @@ const AdminDashboard = ({ handleLogout }) => {
 
   const handleUpdateCourse = async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/courses/${editingCourse.courseId}`, {
+      const updateData = {
+        ...courseForm,
+        startTime: formatTime(courseForm.startTime),
+        endTime: formatTime(courseForm.endTime)
+      };
+      
+      const response = await fetch(`http://localhost:8080/api/admin/courses/${editingCourse.courseId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(courseForm)
+        body: JSON.stringify(updateData)
       });
       
       if (response.ok) {
@@ -141,7 +295,8 @@ const AdminDashboard = ({ handleLogout }) => {
         setEditingCourse(null);
         fetchCourses();
       } else {
-        throw new Error('Failed to update course');
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to update course');
       }
     } catch (err) {
       alert('Error updating course: ' + err.message);
@@ -152,7 +307,7 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Are you sure you want to delete this course?')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/courses/${courseId}`, {
+      const response = await fetch(`http://localhost:8080/api/admin/courses/${courseId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -171,7 +326,7 @@ const AdminDashboard = ({ handleLogout }) => {
   // Student CRUD operations
   const handleAddStudent = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/students', {
+      const response = await fetch('http://localhost:8080/api/admin/students', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -184,8 +339,7 @@ const AdminDashboard = ({ handleLogout }) => {
         alert('Student added successfully!');
         setShowStudentModal(false);
         setStudentForm({
-          name: '', email: '', password: '', studentId: '',
-          major: '', year: '', points: '1000'
+          name: '', email: '', password: '', role: 'student', year: 1, deptId: 1
         });
         fetchStudents();
       } else {
@@ -198,7 +352,7 @@ const AdminDashboard = ({ handleLogout }) => {
 
   const handleUpdateStudent = async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/students/${editingStudent.studentId}`, {
+      const response = await fetch(`http://localhost:8080/api/admin/students/${editingStudent.studentId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -224,7 +378,7 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Are you sure you want to delete this student?')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/students/${studentId}`, {
+      const response = await fetch(`http://localhost:8080/api/admin/students/${studentId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -240,21 +394,135 @@ const AdminDashboard = ({ handleLogout }) => {
     }
   };
 
-  // Publish bidding results
-  const handlePublishResults = async () => {
-    if (!window.confirm('Are you sure you want to publish bidding results? This action cannot be undone.')) return;
+  // Round CRUD operations
+  const handleAddRound = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/admin/rounds', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(roundForm)
+      });
+      
+      if (response.ok) {
+        alert('Round created successfully!');
+        setShowRoundModal(false);
+        setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
+        fetchRounds();
+      } else {
+        throw new Error('Failed to create round');
+      }
+    } catch (err) {
+      alert('Error creating round: ' + err.message);
+    }
+  };
+
+  const handleUpdateRound = async () => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/rounds/${editingRound.roundId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(roundForm)
+      });
+      
+      if (response.ok) {
+        alert('Round updated successfully!');
+        setShowRoundModal(false);
+        setEditingRound(null);
+        setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
+        fetchRounds();
+      } else {
+        throw new Error('Failed to update round');
+      }
+    } catch (err) {
+      alert('Error updating round: ' + err.message);
+    }
+  };
+
+  const handleDeleteRound = async (roundId) => {
+    if (!window.confirm('Are you sure you want to delete this round?')) return;
     
     try {
-      const response = await fetch('http://localhost:8080/api/bids/publish', {
+      const response = await fetch(`http://localhost:8080/api/admin/rounds/${roundId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        alert('Round deleted successfully!');
+        if (selectedRound?.roundId === roundId) {
+          setSelectedRound(null);
+          setRoundBids([]);
+        }
+        fetchRounds();
+      } else {
+        throw new Error('Failed to delete round');
+      }
+    } catch (err) {
+      alert('Error deleting round: ' + err.message);
+    }
+  };
+
+  const handleActivateRound = async (roundId) => {
+    if (!window.confirm('Are you sure you want to activate this round?')) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/rounds/${roundId}/activate`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        alert('Round activated successfully!');
+        fetchRounds();
+      } else {
+        throw new Error('Failed to activate round');
+      }
+    } catch (err) {
+      alert('Error activating round: ' + err.message);
+    }
+  };
+
+  const openRoundModal = (round = null) => {
+    if (round) {
+      setEditingRound(round);
+      setRoundForm({
+        roundNumber: round.roundNumber,
+        roundName: round.roundName,
+        startTime: round.startTime?.substring(0, 16) || '',
+        endTime: round.endTime?.substring(0, 16) || '',
+        status: round.status
+      });
+    } else {
+      setEditingRound(null);
+      const nextRoundNumber = rounds.length > 0 ? Math.max(...rounds.map(r => r.roundNumber)) + 1 : 1;
+      setRoundForm({ roundNumber: nextRoundNumber, roundName: '', startTime: '', endTime: '', status: 'pending' });
+    }
+    setShowRoundModal(true);
+  };
+
+  // Publish bidding results
+  const handlePublishResults = async (roundId) => {
+    if (!window.confirm('Are you sure you want to publish results for this round? This will:\n- Assign courses to highest bidders\n- Refund points to unsuccessful bidders\n- This action cannot be undone.')) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8080/api/rounds/${roundId}/publish`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
-        alert('Bidding results published successfully!');
+        alert('Results published successfully! Courses assigned and points refunded.');
+        fetchRounds();
         fetchBids();
       } else {
-        throw new Error('Failed to publish results');
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to publish results');
       }
     } catch (err) {
       alert('Error publishing results: ' + err.message);
@@ -265,14 +533,18 @@ const AdminDashboard = ({ handleLogout }) => {
     setEditingCourse(course);
     setCourseForm({
       courseName: course.courseName,
-      departmentName: course.departmentName,
+      courseCode: course.courseCode || '',
+      deptId: course.deptId || 1,
       instructorName: course.instructorName,
-      day: course.day,
-      time: course.time,
-      location: course.location,
       credits: course.credits,
-      minBid: course.minBid || '',
-      capacity: course.capacity
+      minBid: course.minBid || 50,
+      capacity: course.capacity,
+      description: course.description || '',
+      prerequisites: course.prerequisites || '',
+      dayOfWeek: course.schedule?.[0]?.dayOfWeek || 'Monday',
+      startTime: formatTime(course.schedule?.[0]?.startTime) || '09:00',
+      endTime: formatTime(course.schedule?.[0]?.endTime) || '12:00',
+      location: course.schedule?.[0]?.location || ''
     });
     setShowCourseModal(true);
   };
@@ -283,10 +555,9 @@ const AdminDashboard = ({ handleLogout }) => {
       name: student.name,
       email: student.email,
       password: '',
-      studentId: student.studentId,
-      major: student.major,
-      year: student.year || '',
-      points: student.points || '1000'
+      role: student.role || 'student',
+      year: student.year || 1,
+      deptId: student.deptId || 1
     });
     setShowStudentModal(true);
   };
@@ -295,7 +566,14 @@ const AdminDashboard = ({ handleLogout }) => {
     { title: 'Total Courses', value: courses.length, icon: BookOpen, color: 'from-cyan-600 to-teal-600' },
     { title: 'Total Students', value: students.length, icon: Users, color: 'from-purple-600 to-pink-600' },
     { title: 'Active Bids', value: bids.length, icon: TrendingUp, color: 'from-amber-500 to-orange-500' },
-    { title: 'Avg Bid Points', value: '145', icon: DollarSign, color: 'from-emerald-500 to-green-500' }
+    { 
+      title: 'Avg Bid Points', 
+      value: bids.length > 0 
+        ? Math.round(bids.reduce((sum, bid) => sum + (bid.bidAmount || 0), 0) / bids.length)
+        : 0, 
+      icon: DollarSign, 
+      color: 'from-emerald-500 to-green-500' 
+    }
   ];
 
   return (
@@ -344,7 +622,7 @@ const AdminDashboard = ({ handleLogout }) => {
 
             <div className="bg-white rounded-3xl shadow-lg p-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <button
                   onClick={() => setCurrentTab('courses')}
                   className="bg-gradient-to-r from-cyan-600 to-teal-600 text-white p-4 rounded-xl font-semibold hover:shadow-xl transition-all"
@@ -362,12 +640,6 @@ const AdminDashboard = ({ handleLogout }) => {
                   className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-xl font-semibold hover:shadow-xl transition-all"
                 >
                   View Bids
-                </button>
-                <button
-                  onClick={handlePublishResults}
-                  className="bg-gradient-to-r from-emerald-500 to-green-500 text-white p-4 rounded-xl font-semibold hover:shadow-xl transition-all"
-                >
-                  Publish Results
                 </button>
               </div>
             </div>
@@ -427,53 +699,114 @@ const AdminDashboard = ({ handleLogout }) => {
                 <p className="text-gray-600">Loading courses...</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4">
                 {courses.filter(c => 
-                  c.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  c.instructorName.toLowerCase().includes(searchTerm.toLowerCase())
+                  c.courseName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  c.courseCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  c.instructorName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  c.departmentName?.toLowerCase().includes(searchTerm.toLowerCase())
                 ).map(course => (
-                  <div key={course.courseId} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full">
-                            {course.courseName}
-                          </span>
-                          <span className="text-xs text-gray-600">{course.departmentName}</span>
+                  <div key={course.courseId} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-lg font-bold text-white">
+                              {course.courseCode}
+                            </span>
+                            <span className="text-sm text-indigo-100 bg-white/20 px-3 py-1 rounded-full">
+                              {course.departmentName}
+                            </span>
+                          </div>
+                          <h3 className="text-2xl font-bold text-white mb-1">{course.courseName}</h3>
+                          <p className="text-indigo-100">Prof. {course.instructorName}</p>
                         </div>
-                        <h3 className="text-xl font-bold text-gray-800 mb-2">{course.instructorName}</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                          <div>
-                            <span className="font-semibold">Day:</span> {course.day}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Time:</span> {course.time}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Credits:</span> {course.credits}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Capacity:</span> {course.enrolled}/{course.capacity}
-                          </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => openEditCourse(course)}
+                            className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all"
+                          >
+                            <Edit2 className="w-5 h-5 text-white" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCourse(course.courseId)}
+                            className="p-2 bg-white/20 hover:bg-rose-500 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-5 h-5 text-white" />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openEditCourse(course)}
-                          className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-all"
-                        >
-                          <Edit2 className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCourse(course.courseId)}
-                          className="p-2 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition-all"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                    </div>
+                    
+                    <div className="p-6">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div className="bg-blue-50 p-3 rounded-xl">
+                          <p className="text-xs text-blue-600 font-semibold mb-1">Schedule</p>
+                          <p className="text-sm font-bold text-gray-800">
+                            {course.schedule && course.schedule.length > 0 
+                              ? `${course.schedule[0].dayOfWeek}`
+                              : 'TBA'}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {course.schedule && course.schedule.length > 0 
+                              ? `${formatTime(course.schedule[0].startTime)} - ${formatTime(course.schedule[0].endTime)}`
+                              : ''}
+                          </p>
+                        </div>
+                        
+                        <div className="bg-green-50 p-3 rounded-xl">
+                          <p className="text-xs text-green-600 font-semibold mb-1">Credits</p>
+                          <p className="text-2xl font-bold text-gray-800">{course.credits}</p>
+                        </div>
+                        
+                        <div className="bg-purple-50 p-3 rounded-xl">
+                          <p className="text-xs text-purple-600 font-semibold mb-1">Capacity</p>
+                          <p className="text-sm font-bold text-gray-800">
+                            {course.enrolled || 0} / {course.capacity}
+                          </p>
+                          <p className="text-xs text-gray-600">{course.availableSeats || course.capacity} available</p>
+                        </div>
+                        
+                        <div className="bg-amber-50 p-3 rounded-xl">
+                          <p className="text-xs text-amber-600 font-semibold mb-1">Min Bid</p>
+                          <p className="text-2xl font-bold text-gray-800">{course.minBid || 0}</p>
+                        </div>
                       </div>
+                      
+                      {course.prerequisites && (
+                        <div className="bg-orange-50 border-l-4 border-orange-400 p-3 rounded-r-xl mb-4">
+                          <p className="text-xs text-orange-600 font-semibold mb-1">Prerequisites</p>
+                          <p className="text-sm text-gray-700">{course.prerequisites}</p>
+                        </div>
+                      )}
+                      
+                      {course.description && (
+                        <div className="bg-gray-50 p-4 rounded-xl">
+                          <p className="text-xs text-gray-600 font-semibold mb-2">Description</p>
+                          <p className="text-sm text-gray-700 leading-relaxed">{course.description}</p>
+                        </div>
+                      )}
+                      
+                      {course.schedule && course.schedule.length > 0 && course.schedule[0].location && (
+                        <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
+                          <span className="font-semibold">Location:</span>
+                          <span>{course.schedule[0].location}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
+                
+                {courses.filter(c => 
+                  c.courseName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  c.courseCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  c.instructorName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  c.departmentName?.toLowerCase().includes(searchTerm.toLowerCase())
+                ).length === 0 && (
+                  <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+                    <p className="text-gray-600">No courses found matching "{searchTerm}"</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -515,49 +848,79 @@ const AdminDashboard = ({ handleLogout }) => {
                 <p className="text-gray-600">Loading students...</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {students.filter(s => 
                   s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                   s.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  s.studentId?.toLowerCase().includes(searchTerm.toLowerCase())
+                  s.departmentName?.toLowerCase().includes(searchTerm.toLowerCase())
                 ).map(student => (
-                  <div key={student.id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-xl font-bold text-gray-800">{student.name}</h3>
-                        <p className="text-sm text-gray-600">{student.email}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openEditStudent(student)}
-                          className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-all"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteStudent(student.studentId)}
-                          className="p-2 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                  <div key={student.studentId} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all overflow-hidden">
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="text-xl font-bold text-white mb-1">{student.name}</h3>
+                          <p className="text-sm text-blue-100">{student.email}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => openEditStudent(student)}
+                            className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteStudent(student.studentId)}
+                            className="p-2 bg-rose-500/80 hover:bg-rose-600 text-white rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3 text-sm text-gray-600">
-                      <div>
-                        <span className="font-semibold">ID:</span> {student.studentId}
+                    
+                    <div className="p-6">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-purple-50 p-3 rounded-xl">
+                          <p className="text-xs text-purple-600 font-semibold mb-1">Student ID</p>
+                          <p className="text-lg font-bold text-gray-800">{student.studentId}</p>
+                        </div>
+                        
+                        <div className="bg-green-50 p-3 rounded-xl">
+                          <p className="text-xs text-green-600 font-semibold mb-1">Bid Points</p>
+                          <p className="text-lg font-bold text-gray-800">{student.bidPoints || 0}</p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="font-semibold">Major:</span> {student.major}
-                      </div>
-                      <div>
-                        <span className="font-semibold">Year:</span> {student.year || 'N/A'}
-                      </div>
-                      <div>
-                        <span className="font-semibold">Points:</span> {student.points || 1000}
+                      
+                      <div className="mt-4 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-600 font-semibold">Major</span>
+                          <span className="text-sm text-gray-800 font-medium">{student.departmentName || 'N/A'}</span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-600 font-semibold">Year</span>
+                          <span className="text-sm text-gray-800 font-medium">
+                            {student.year === 1 ? '1st Year' : 
+                             student.year === 2 ? '2nd Year' : 
+                             student.year === 3 ? '3rd Year' : 
+                             student.year === 4 ? '4th Year' : 
+                             student.year ? student.year + 'th Year' : 'N/A'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
                 ))}
+                
+                {students.filter(s => 
+                  s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  s.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  s.departmentName?.toLowerCase().includes(searchTerm.toLowerCase())
+                ).length === 0 && (
+                  <div className="col-span-full bg-white rounded-2xl shadow-lg p-12 text-center">
+                    <p className="text-gray-600">No students found matching "{searchTerm}"</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -565,62 +928,186 @@ const AdminDashboard = ({ handleLogout }) => {
 
         {/* Bids Tab */}
         {currentTab === 'bids' && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow-lg p-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-800">All Bids</h2>
+              <h2 className="text-xl font-bold text-gray-800">Rounds & Bids Management</h2>
               <button
-                onClick={handlePublishResults}
-                className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-xl transition-all"
+                onClick={() => openRoundModal()}
+                className="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-xl transition-all"
               >
-                <CheckCircle className="w-5 h-5" />
-                Publish Results
+                <Plus className="w-5 h-5" />
+                Create New Round
               </button>
             </div>
 
             {loading ? (
               <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading bids...</p>
+                <p className="text-gray-600">Loading rounds...</p>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-                      <tr>
-                        <th className="px-6 py-4 text-left">Student</th>
-                        <th className="px-6 py-4 text-left">Course</th>
-                        <th className="px-6 py-4 text-left">Bid Amount</th>
-                        <th className="px-6 py-4 text-left">Status</th>
-                        <th className="px-6 py-4 text-left">Round</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {bids.map((bid, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-6 py-4">{bid.studentName || bid.studentId}</td>
-                          <td className="px-6 py-4">{bid.courseName || bid.courseId}</td>
-                          <td className="px-6 py-4 font-bold text-indigo-600">{bid.bidAmount} pts</td>
-                          <td className="px-6 py-4">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              bid.status === 'won' ? 'bg-green-100 text-green-700' :
-                              bid.status === 'lost' ? 'bg-red-100 text-red-700' :
-                              'bg-amber-100 text-amber-700'
-                            }`}>
-                              {bid.status || 'Pending'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">Round {bid.round || 1}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {rounds.map((round) => {
+                  const roundStatus = getRoundStatus(round);
+                  const countdown = getCountdown(round);
+                  
+                  return (
+                  <div key={round.roundId} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all">
+                    <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-6 text-white">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-2xl font-bold">Round {round.roundNumber}</h3>
+                          <p className="text-indigo-100 mt-1">{round.roundName || 'Unnamed Round'}</p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${roundStatus.color} text-white`}>
+                          {roundStatus.label}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                      {/* Real-time Countdown */}
+                      <div className="bg-gradient-to-r from-cyan-50 to-blue-50 p-4 rounded-xl border border-cyan-200">
+                        <p className="text-xs text-gray-600 mb-1">Timer</p>
+                        <p className="text-lg font-bold text-cyan-700">{countdown}</p>
+                      </div>
+
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-500" />
+                          <span className="text-gray-600">Start:</span>
+                          <span className="font-medium">{round.startTime ? new Date(round.startTime).toLocaleString() : 'Not set'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-500" />
+                          <span className="text-gray-600">End:</span>
+                          <span className="font-medium">{round.endTime ? new Date(round.endTime).toLocaleString() : 'Not set'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => fetchRoundBids(round.roundId)}
+                          className="flex-1 flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-all font-semibold"
+                        >
+                          <Eye className="w-4 h-4" />
+                          View Bids
+                        </button>
+                        <button
+                          onClick={() => openRoundModal(round)}
+                          className="flex items-center justify-center bg-blue-50 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-100 transition-all"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteRound(round.roundId)}
+                          className="flex items-center justify-center bg-red-50 text-red-600 px-4 py-2 rounded-lg hover:bg-red-100 transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {roundStatus.status === 'completed' && (
+                        <button
+                          onClick={() => handlePublishResults(round.roundId)}
+                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all font-semibold"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Publish Results
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )})}
+
+                {rounds.length === 0 && (
+                  <div className="col-span-full bg-white rounded-2xl shadow-lg p-12 text-center">
+                    <p className="text-gray-600">No rounds created yet. Click "Create New Round" to get started.</p>
+                  </div>
+                )}
               </div>
             )}
+
+            {/* Round Bids Table */}
           </div>
         )}
       </div>
+
+      {/* Round Bids Modal */}
+      {selectedRound && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-2xl font-bold">Round {selectedRound.roundNumber} - Bids</h3>
+                  <p className="text-indigo-100 mt-1">{selectedRound.roundName || 'Unnamed Round'}</p>
+                  <p className="text-indigo-100 text-sm mt-2">Total Bids: {selectedRound.totalBids || roundBids.length}</p>
+                </div>
+                <button
+                  onClick={() => { setSelectedRound(null); setRoundBids([]); }}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-all"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-auto flex-1">
+              <table className="w-full">
+                <thead className="bg-gray-100 sticky top-0">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Student</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Email</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Course</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Bid Amount</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Priority</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Status</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Created</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {roundBids.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                        No bids in this round yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    roundBids.map((bid) => (
+                      <tr key={bid.bidId} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 font-medium text-gray-800">{bid.studentName}</td>
+                        <td className="px-6 py-4 text-gray-600">{bid.studentEmail}</td>
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="font-semibold text-gray-800">{bid.courseCode}</p>
+                            <p className="text-sm text-gray-500">{bid.courseName}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-bold text-indigo-600">{bid.bidAmount} pts</td>
+                        <td className="px-6 py-4 text-gray-600">{bid.priority || 'N/A'}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            bid.status === 'won' ? 'bg-green-100 text-green-700' :
+                            bid.status === 'lost' ? 'bg-red-100 text-red-700' :
+                            bid.status === 'cancelled' ? 'bg-gray-100 text-gray-700' :
+                            'bg-amber-100 text-amber-700'
+                          }`}>
+                            {bid.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {bid.createdAt ? new Date(bid.createdAt).toLocaleDateString() : 'N/A'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Course Modal */}
       {showCourseModal && (
@@ -644,68 +1131,47 @@ const AdminDashboard = ({ handleLogout }) => {
                     value={courseForm.courseName}
                     onChange={(e) => setCourseForm({...courseForm, courseName: e.target.value})}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
-                    placeholder="CS301 Advanced Algorithms"
+                    placeholder="Advanced Algorithms"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Course Code</label>
                   <input
                     type="text"
-                    value={courseForm.departmentName}
-                    onChange={(e) => setCourseForm({...courseForm, departmentName: e.target.value})}
+                    value={courseForm.courseCode}
+                    onChange={(e) => setCourseForm({...courseForm, courseCode: e.target.value})}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
-                    placeholder="Computer Science"
+                    placeholder="CS301"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Instructor Name</label>
-                <input
-                  type="text"
-                  value={courseForm.instructorName}
-                  onChange={(e) => setCourseForm({...courseForm, instructorName: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
-                  placeholder="Dr. Sarah Mitchell"
-                />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Day</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
                   <select
-                    value={courseForm.day}
-                    onChange={(e) => setCourseForm({...courseForm, day: e.target.value})}
+                    value={courseForm.deptId}
+                    onChange={(e) => setCourseForm({...courseForm, deptId: parseInt(e.target.value)})}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
                   >
-                    <option value="">Select Day</option>
-                    <option value="Monday">Monday</option>
-                    <option value="Tuesday">Tuesday</option>
-                    <option value="Wednesday">Wednesday</option>
-                    <option value="Thursday">Thursday</option>
-                    <option value="Friday">Friday</option>
+                    <option value="">Select Department</option>
+                    {departments.map(dept => (
+                      <option key={dept.deptId} value={dept.deptId}>
+                        {dept.deptName} ({dept.deptCode})
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Time</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Instructor Name</label>
                   <input
-                    type="time"
-                    value={courseForm.time}
-                    onChange={(e) => setCourseForm({...courseForm, time: e.target.value})}
+                    type="text"
+                    value={courseForm.instructorName}
+                    onChange={(e) => setCourseForm({...courseForm, instructorName: e.target.value})}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    placeholder="Dr. Sarah Mitchell"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Location</label>
-                <input
-                  type="text"
-                  value={courseForm.location}
-                  onChange={(e) => setCourseForm({...courseForm, location: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
-                  placeholder="CS Building Room 101"
-                />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -714,7 +1180,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   <input
                     type="number"
                     value={courseForm.credits}
-                    onChange={(e) => setCourseForm({...courseForm, credits: e.target.value})}
+                    onChange={(e) => setCourseForm({...courseForm, credits: parseInt(e.target.value)})}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
                     placeholder="3"
                   />
@@ -724,9 +1190,9 @@ const AdminDashboard = ({ handleLogout }) => {
                   <input
                     type="number"
                     value={courseForm.minBid}
-                    onChange={(e) => setCourseForm({...courseForm, minBid: e.target.value})}
+                    onChange={(e) => setCourseForm({...courseForm, minBid: parseInt(e.target.value)})}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
-                    placeholder="10"
+                    placeholder="50"
                   />
                 </div>
                 <div>
@@ -734,9 +1200,90 @@ const AdminDashboard = ({ handleLogout }) => {
                   <input
                     type="number"
                     value={courseForm.capacity}
-                    onChange={(e) => setCourseForm({...courseForm, capacity: e.target.value})}
+                    onChange={(e) => setCourseForm({...courseForm, capacity: parseInt(e.target.value)})}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
                     placeholder="30"
+                  />
+                </div>
+              </div>
+
+              {/* Schedule Section */}
+              <div className="border-t-2 border-gray-200 pt-4 mt-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-indigo-600" />
+                  Course Schedule
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Day of Week</label>
+                    <select
+                      value={courseForm.dayOfWeek}
+                      onChange={(e) => setCourseForm({...courseForm, dayOfWeek: e.target.value})}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    >
+                      <option value="Monday">Monday</option>
+                      <option value="Tuesday">Tuesday</option>
+                      <option value="Wednesday">Wednesday</option>
+                      <option value="Thursday">Thursday</option>
+                      <option value="Friday">Friday</option>
+                      <option value="Saturday">Saturday</option>
+                      <option value="Sunday">Sunday</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Location</label>
+                    <input
+                      type="text"
+                      value={courseForm.location}
+                      onChange={(e) => setCourseForm({...courseForm, location: e.target.value})}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                      placeholder="Room 305, Building A"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Start Time</label>
+                    <input
+                      type="time"
+                      value={courseForm.startTime}
+                      onChange={(e) => setCourseForm({...courseForm, startTime: e.target.value})}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">End Time</label>
+                    <input
+                      type="time"
+                      value={courseForm.endTime}
+                      onChange={(e) => setCourseForm({...courseForm, endTime: e.target.value})}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Information Section */}
+              <div className="border-t-2 border-gray-200 pt-4 mt-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Additional Information</h3>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Prerequisites (Optional)</label>
+                  <input
+                    type="text"
+                    value={courseForm.prerequisites}
+                    onChange={(e) => setCourseForm({...courseForm, prerequisites: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    placeholder="CS101, MATH201"
+                  />
+                </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                  <textarea
+                    value={courseForm.description}
+                    onChange={(e) => setCourseForm({...courseForm, description: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    placeholder="Course description and objectives..."
+                    rows="3"
                   />
                 </div>
               </div>
@@ -775,27 +1322,15 @@ const AdminDashboard = ({ handleLogout }) => {
             </div>
 
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
-                  <input
-                    type="text"
-                    value={studentForm.name}
-                    onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
-                    placeholder="John Doe"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Student ID</label>
-                  <input
-                    type="text"
-                    value={studentForm.studentId}
-                    onChange={(e) => setStudentForm({...studentForm, studentId: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
-                    placeholder="STU2024001"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={studentForm.name}
+                  onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  placeholder="John Doe"
+                />
               </div>
 
               <div>
@@ -822,40 +1357,34 @@ const AdminDashboard = ({ handleLogout }) => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Major</label>
-                  <input
-                    type="text"
-                    value={studentForm.major}
-                    onChange={(e) => setStudentForm({...studentForm, major: e.target.value})}
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
+                  <select
+                    value={studentForm.deptId}
+                    onChange={(e) => setStudentForm({...studentForm, deptId: parseInt(e.target.value)})}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
-                    placeholder="Computer Science"
-                  />
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map(dept => (
+                      <option key={dept.deptId} value={dept.deptId}>
+                        {dept.deptName}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Year</label>
                   <select
                     value={studentForm.year}
-                    onChange={(e) => setStudentForm({...studentForm, year: e.target.value})}
+                    onChange={(e) => setStudentForm({...studentForm, year: parseInt(e.target.value)})}
                     className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
                   >
-                    <option value="">Select Year</option>
-                    <option value="Freshman">Freshman</option>
-                    <option value="Sophomore">Sophomore</option>
-                    <option value="Junior">Junior</option>
-                    <option value="Senior">Senior</option>
+                    <option value="1">Year 1</option>
+                    <option value="2">Year 2</option>
+                    <option value="3">Year 3</option>
+                    <option value="4">Year 4</option>
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Points</label>
-                  <input
-                    type="number"
-                    value={studentForm.points}
-                    onChange={(e) => setStudentForm({...studentForm, points: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
-                    placeholder="1000"
-                  />
                 </div>
               </div>
 
@@ -872,6 +1401,98 @@ const AdminDashboard = ({ handleLogout }) => {
                 >
                   <Save className="w-5 h-5" />
                   {editingStudent ? 'Update' : 'Add'} Student
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Round Modal */}
+      {showRoundModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">
+                {editingRound ? 'Edit Round' : 'Create New Round'}
+              </h2>
+              <button onClick={() => setShowRoundModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Round Number</label>
+                  <input
+                    type="number"
+                    value={roundForm.roundNumber}
+                    onChange={(e) => setRoundForm({...roundForm, roundNumber: parseInt(e.target.value)})}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    placeholder="1"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                  <select
+                    value={roundForm.status}
+                    onChange={(e) => setRoundForm({...roundForm, status: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Round Name</label>
+                <input
+                  type="text"
+                  value={roundForm.roundName}
+                  onChange={(e) => setRoundForm({...roundForm, roundName: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  placeholder="First Round Bidding"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Start Time</label>
+                  <input
+                    type="datetime-local"
+                    value={roundForm.startTime}
+                    onChange={(e) => setRoundForm({...roundForm, startTime: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">End Time</label>
+                  <input
+                    type="datetime-local"
+                    value={roundForm.endTime}
+                    onChange={(e) => setRoundForm({...roundForm, endTime: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowRoundModal(false)}
+                  className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={editingRound ? handleUpdateRound : handleAddRound}
+                  className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  {editingRound ? 'Update' : 'Create'} Round
                 </button>
               </div>
             </div>

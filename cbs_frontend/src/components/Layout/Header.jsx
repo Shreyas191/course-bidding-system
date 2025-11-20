@@ -1,5 +1,6 @@
 import React from 'react';
 import { BookOpen, DollarSign, Menu, X, ShoppingCart, Clock } from 'lucide-react';
+import NotificationBell from '../Notifications/NotificationBell';
 
 const Header = ({ userProfile, points, showMobileMenu, setShowMobileMenu, cart, setShowCart, currentRound, roundStatus }) => {
   return (
@@ -29,6 +30,9 @@ const Header = ({ userProfile, points, showMobileMenu, setShowMobileMenu, cart, 
                 <span className="capitalize">{roundStatus}</span>
               </div>
             </div>
+
+            {/* Notification Bell */}
+            <NotificationBell userProfile={userProfile} />
 
             <button
               onClick={() => setShowCart(true)}

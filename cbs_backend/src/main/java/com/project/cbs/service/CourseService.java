@@ -1,13 +1,13 @@
 package com.project.cbs.service;
 
+import com.project.cbs.dto.CourseDetailsDto;
+import com.project.cbs.model.Course;
+import java.util.List;
+
 public interface CourseService {
-    // TODO: Add service methods
-    // - getAllCourses()
-    // - getCourseById(Long id)
-    // - createCourse(CourseDTO dto)
-    // - updateCourse(Long id, CourseDTO dto)
-    // - deleteCourse(Long id)
-    // - searchCourses(String keyword)
-    // - getCoursesByDepartment(Long deptId)
-    // - checkCourseAvailability(Long id)
+    List<CourseDetailsDto> getAllCourses();
+    CourseDetailsDto getCourseById(Long id);
+    List<CourseDetailsDto> searchCourses(String keyword);
+    List<CourseDetailsDto> getCoursesByDepartment(Integer deptId);
+    List<CourseDetailsDto> getEnrolledCourses(String token);
 }

@@ -1,12 +1,14 @@
 package com.project.cbs.service;
 
+import com.project.cbs.dto.BidRequestDto;
+import com.project.cbs.dto.BidResponseDto;
+import java.util.List;
+
 public interface BidService {
-    // TODO: Add service methods
-    // - placeBid(BidDTO dto)
-    // - getBidsByStudent(Long studentId)
-    // - getBidsByCourse(Long courseId)
-    // - getBidsByRound(Long roundId)
-    // - updateBid(Long id, BidDTO dto)
-    // - cancelBid(Long id)
-    // - processBidsForRound(Long roundId)
+    BidResponseDto placeBid(Long studentId, BidRequestDto request, Integer roundId);
+    List<BidResponseDto> getMyBids(Long studentId);
+    List<BidResponseDto> getMyBidsByRound(Long studentId, Integer roundId);
+    void cancelBid(Long bidId, Long studentId);
+    List<BidResponseDto> getAllBids();
+    List<BidResponseDto> getBidsByRound(Integer roundId);
 }
