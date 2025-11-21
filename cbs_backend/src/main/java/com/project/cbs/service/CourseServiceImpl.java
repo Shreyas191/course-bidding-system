@@ -13,7 +13,6 @@ import com.project.cbs.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -41,7 +40,7 @@ public class CourseServiceImpl implements CourseService {
         if (course == null) {
             throw new RuntimeException("Course not found");
         }
-        return convertToDetailsDto(course);
+        return convertToDetailsDto(course);  // CHANGED: Return DTO instead of Course
     }
 
     @Override
@@ -66,10 +65,10 @@ public class CourseServiceImpl implements CourseService {
             // Extract student ID from token
             Long studentId = jwtUtil.extractStudentId(token);
             log.info("Fetching enrolled courses for student ID: {}", studentId);
-            
+
             // Get all enrollments for this student
             List<Enrollment> enrollments = enrollmentRepository.findByStudentId(studentId);
-            
+
             // Convert to course details
             return enrollments.stream()
                     .map(enrollment -> {
@@ -83,11 +82,21 @@ public class CourseServiceImpl implements CourseService {
             throw new RuntimeException("Failed to fetch enrolled courses: " + e.getMessage());
         }
     }
+    
+    /**
+     * Check if course is full using is_course_full() MySQL function
+     */
+    public Boolean isCourseFull(Long courseId) {
+        return courseRepository.isCourseFull(courseId.intValue());
+    }
 
+    /**
+     * Convert Course model to CourseDetailsDto with is_course_full() check
+     */
     private CourseDetailsDto convertToDetailsDto(Course course) {
         Department dept = departmentRepository.findById(course.getDeptId());
         List<CourseSchedule> schedules = courseRepository.findScheduleByCourseId(course.getCourseId());
-        
+
         CourseDetailsDto dto = new CourseDetailsDto();
         dto.setCourseId(course.getCourseId());
         dto.setCourseCode(course.getCourseCode());
@@ -103,6 +112,10 @@ public class CourseServiceImpl implements CourseService {
         dto.setDescription(course.getDescription());
         dto.setPrerequisites(course.getPrerequisites());
         
+        // Use is_course_full() MySQL function
+        dto.setIsFull(courseRepository.isCourseFull(course.getCourseId().intValue()));
+
+        // Convert schedules
         List<ScheduleDto> scheduleDtos = schedules.stream()
                 .map(s -> new ScheduleDto(
                         s.getDayOfWeek(),
@@ -112,7 +125,7 @@ public class CourseServiceImpl implements CourseService {
                 ))
                 .collect(Collectors.toList());
         dto.setSchedule(scheduleDtos);
-        
+
         return dto;
     }
 }

@@ -1,22 +1,70 @@
 package com.project.cbs.controller;
 
 import com.project.cbs.dto.CourseDetailsDto;
+import com.project.cbs.model.Course;
+import com.project.cbs.repository.CourseRepository;
 import com.project.cbs.service.CourseService;
+import com.project.cbs.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
-
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/courses")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:5174"})
+@CrossOrigin(origins = "http://localhost:5173")
 public class CourseController {
 
     private final CourseService courseService;
+    private final CourseRepository courseRepository;
+    private final JwtUtil jwtUtil;
+    
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @GetMapping("/my-enrollments")
+    public ResponseEntity<?> getMyEnrollments(@RequestHeader("Authorization") String authHeader) {
+        try {
+            // Extract student ID from token (assuming it's stored in the token)
+            // For now, we'll get it from the authentication context
+            String token = authHeader.replace("Bearer ", "");
+            List<CourseDetailsDto> enrolledCourses = courseService.getEnrolledCourses(token);
+            return ResponseEntity.ok(enrolledCourses);
+        } catch (Exception e) {
+            log.error("Error getting course availability: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/my-courses")
+    public ResponseEntity<?> getEnrolledCourses(@RequestHeader("Authorization") String authHeader) {
+        try {
+            String token = authHeader.substring(7);
+            List<CourseDetailsDto> courses = courseService.getEnrolledCourses(token);
+            return ResponseEntity.ok(courses);
+        } catch (Exception e) {
+            log.error("Error fetching enrolled courses: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+     @GetMapping("/search")
+    public ResponseEntity<?> searchCourses(@RequestParam String keyword) {
+        try {
+            List<CourseDetailsDto> courses = courseService.searchCourses(keyword);
+            return ResponseEntity.ok(courses);
+        } catch (Exception e) {
+            log.error("Error searching courses: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 
     @GetMapping
     public ResponseEntity<?> getAllCourses() {
@@ -40,17 +88,6 @@ public class CourseController {
         }
     }
 
-    @GetMapping("/search")
-    public ResponseEntity<?> searchCourses(@RequestParam String keyword) {
-        try {
-            List<CourseDetailsDto> courses = courseService.searchCourses(keyword);
-            return ResponseEntity.ok(courses);
-        } catch (Exception e) {
-            log.error("Error searching courses: ", e);
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
     @GetMapping("/department/{deptId}")
     public ResponseEntity<?> getCoursesByDepartment(@PathVariable Integer deptId) {
         try {
@@ -58,20 +95,6 @@ public class CourseController {
             return ResponseEntity.ok(courses);
         } catch (Exception e) {
             log.error("Error fetching courses by department: ", e);
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @GetMapping("/my-enrollments")
-    public ResponseEntity<?> getMyEnrollments(@RequestHeader("Authorization") String authHeader) {
-        try {
-            // Extract student ID from token (assuming it's stored in the token)
-            // For now, we'll get it from the authentication context
-            String token = authHeader.replace("Bearer ", "");
-            List<CourseDetailsDto> enrolledCourses = courseService.getEnrolledCourses(token);
-            return ResponseEntity.ok(enrolledCourses);
-        } catch (Exception e) {
-            log.error("Error fetching enrolled courses: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }

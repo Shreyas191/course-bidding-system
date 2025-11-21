@@ -129,6 +129,50 @@ public class NotificationServiceImpl implements NotificationService {
         notificationRepository.markAllAsRead(studentId);
     }
 
+    /**
+     * Send a simple notification to a user (used by BidService and other services)
+     */
+    @Override
+    @Transactional
+    public void sendToUser(Long studentId, String title, String message, String type) {
+        Notification notification = new Notification();
+        notification.setStudentId(studentId);
+        notification.setTitle(title);
+        notification.setMessage(message);
+        notification.setType(type);
+        notification.setIsRead(false);
+        
+        notificationRepository.save(notification);
+        log.info("Notification sent to student {}: {}", studentId, title);
+        
+        // Send real-time notification via WebSocket
+        webSocketService.sendToUser(studentId, convertToDto(notification));
+    }
+
+    /**
+     * Get unread notifications for a student
+     */
+    @Override
+    public List<NotificationDto> getUnreadNotifications(Long studentId) {
+        List<Notification> notifications = notificationRepository.findUnreadByStudentId(studentId);
+        return notifications.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Delete a notification
+     */
+    @Override
+    @Transactional
+    public void deleteNotification(Long notificationId) {
+        notificationRepository.delete(notificationId);
+        log.info("Notification {} deleted", notificationId);
+    }
+
+    /**
+     * Convert Notification model to NotificationDto
+     */
     private NotificationDto convertToDto(Notification notification) {
         NotificationDto dto = new NotificationDto();
         dto.setNotificationId(notification.getNotificationId());

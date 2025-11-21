@@ -9,10 +9,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
-
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 
@@ -40,6 +37,21 @@ public class CourseRepository {
         course.setUpdatedAt(rs.getTimestamp("updated_at"));
         return course;
     };
+    
+    /**
+     * Check if a course is full using is_course_full() MySQL function
+     * Returns true if enrolled >= capacity
+     */
+    public Boolean isCourseFull(Integer courseId) {
+        String sql = "SELECT is_course_full(?)";
+        try {
+            Boolean result = jdbcTemplate.queryForObject(sql, Boolean.class, courseId);
+            return result != null ? result : false;
+        } catch (Exception e) {
+            log.error("Error checking if course {} is full: {}", courseId, e.getMessage());
+            return false;
+        }
+    }
 
     public List<Course> findAll() {
         String sql = "SELECT * FROM course ORDER BY course_code";
@@ -48,7 +60,8 @@ public class CourseRepository {
 
     public Course findById(Long courseId) {
         String sql = "SELECT * FROM course WHERE course_id = ?";
-        return jdbcTemplate.queryForObject(sql, courseRowMapper, courseId);
+        List<Course> courses = jdbcTemplate.query(sql, courseRowMapper, courseId);
+        return courses.isEmpty() ? null : courses.get(0);
     }
 
     public List<Course> findByDepartment(Integer deptId) {
@@ -57,9 +70,9 @@ public class CourseRepository {
     }
 
     public Long save(Course course) {
-        String sql = "INSERT INTO course (course_code, course_name, dept_id, instructor_name, credits, capacity, enrolled, min_bid, description, prerequisites) " +
+        String sql = "INSERT INTO course (course_code, course_name, dept_id, instructor_name, " +
+                     "credits, capacity, enrolled, min_bid, description, prerequisites) " +
                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -75,15 +88,13 @@ public class CourseRepository {
             ps.setString(10, course.getPrerequisites());
             return ps;
         }, keyHolder);
-        
         return keyHolder.getKey().longValue();
     }
 
     public void update(Course course) {
-        String sql = "UPDATE course SET course_code = ?, course_name = ?, dept_id = ?, instructor_name = ?, " +
-                     "credits = ?, capacity = ?, enrolled = ?, min_bid = ?, description = ?, prerequisites = ? " +
-                     "WHERE course_id = ?";
-        
+        String sql = "UPDATE course SET course_code = ?, course_name = ?, dept_id = ?, " +
+                     "instructor_name = ?, credits = ?, capacity = ?, enrolled = ?, min_bid = ?, " +
+                     "description = ?, prerequisites = ?, updated_at = NOW() WHERE course_id = ?";
         jdbcTemplate.update(sql,
                 course.getCourseCode(),
                 course.getCourseName(),
@@ -105,7 +116,6 @@ public class CourseRepository {
 
     public List<CourseSchedule> findScheduleByCourseId(Long courseId) {
         String sql = "SELECT * FROM course_schedule WHERE course_id = ? ORDER BY day_of_week, start_time";
-        
         return jdbcTemplate.query(sql, (rs, rowNum) -> {
             CourseSchedule schedule = new CourseSchedule();
             schedule.setScheduleId(rs.getLong("schedule_id"));
@@ -121,7 +131,6 @@ public class CourseRepository {
     public void saveSchedule(CourseSchedule schedule) {
         String sql = "INSERT INTO course_schedule (course_id, day_of_week, start_time, end_time, location) " +
                      "VALUES (?, ?, ?, ?, ?)";
-        
         jdbcTemplate.update(sql,
                 schedule.getCourseId(),
                 schedule.getDayOfWeek(),
@@ -131,12 +140,13 @@ public class CourseRepository {
     }
 
     public void updateEnrollmentCount(Long courseId, int change) {
-        String sql = "UPDATE course SET enrolled = enrolled + ? WHERE course_id = ?";
+        String sql = "UPDATE course SET enrolled = enrolled + ?, updated_at = NOW() WHERE course_id = ?";
         jdbcTemplate.update(sql, change, courseId);
     }
 
     public List<Course> searchCourses(String keyword) {
-        String sql = "SELECT * FROM course WHERE course_code LIKE ? OR course_name LIKE ? OR instructor_name LIKE ?";
+        String sql = "SELECT * FROM course WHERE course_code LIKE ? OR course_name LIKE ? " +
+                     "OR instructor_name LIKE ? ORDER BY course_code";
         String searchPattern = "%" + keyword + "%";
         return jdbcTemplate.query(sql, courseRowMapper, searchPattern, searchPattern, searchPattern);
     }

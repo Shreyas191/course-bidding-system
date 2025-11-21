@@ -14,4 +14,9 @@ public class WaitlistDto {
     private String courseName;
     private Integer position;
     private String createdAt;
+    
+    // NEW: Support for is_course_full() function
+    private Boolean isCourseFull;
+    private Integer courseCapacity;
+    private Integer currentEnrolled;
 }

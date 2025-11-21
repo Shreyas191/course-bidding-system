@@ -1,20 +1,18 @@
 package com.project.cbs.controller;
 
 import com.project.cbs.dto.RoundDto;
-import com.project.cbs.model.Round;
 import com.project.cbs.service.RoundService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/rounds")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:5174"})
+@CrossOrigin(origins = "http://localhost:5173")
 public class RoundController {
 
     private final RoundService roundService;
@@ -33,11 +31,11 @@ public class RoundController {
     @GetMapping("/current")
     public ResponseEntity<?> getCurrentRound() {
         try {
-            RoundDto round = roundService.getCurrentRound();
-            if (round == null) {
-                return ResponseEntity.ok().body(null);
+            RoundDto currentRound = roundService.getCurrentRound();
+            if (currentRound == null) {
+                return ResponseEntity.ok("No active round");
             }
-            return ResponseEntity.ok(round);
+            return ResponseEntity.ok(currentRound);
         } catch (Exception e) {
             log.error("Error fetching current round: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -48,21 +46,12 @@ public class RoundController {
     public ResponseEntity<?> getRoundById(@PathVariable Integer id) {
         try {
             RoundDto round = roundService.getRoundById(id);
+            if (round == null) {
+                return ResponseEntity.badRequest().body("Round not found");
+            }
             return ResponseEntity.ok(round);
         } catch (Exception e) {
             log.error("Error fetching round: ", e);
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-
-    @PostMapping("/{id}/publish")
-    public ResponseEntity<?> publishResults(@PathVariable Integer id) {
-        try {
-            log.info("Publishing results for round {}", id);
-            roundService.processRound(id);
-            return ResponseEntity.ok().body("Round results published successfully");
-        } catch (Exception e) {
-            log.error("Error publishing round results: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }

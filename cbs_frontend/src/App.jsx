@@ -230,7 +230,7 @@ const App = () => {
   // Fetch user's enrolled courses
   const fetchMyEnrollments = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/courses/my-enrollments', {
+      const response = await fetch('http://localhost:8080/api/courses/my-courses', {
         headers: getAuthHeaders()
       });
       
@@ -617,19 +617,7 @@ const App = () => {
             </div>
           )}
 
-          {!loading && !error && myBids.length > 0 && currentRound <= 2 && (
-            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
-              <p className="text-sm text-amber-800 mb-2">
-                <strong>Demo Mode:</strong> Simulate round ending to see results
-              </p>
-              <button
-                onClick={handleSimulateRoundEnd}
-                className="px-4 py-2 bg-amber-600 text-white rounded-xl font-semibold hover:bg-amber-700 transition-all"
-              >
-                End Round {currentRound} & View Results
-              </button>
-            </div>
-          )}
+          
 
           {currentPage === 'home' && (
             <Home

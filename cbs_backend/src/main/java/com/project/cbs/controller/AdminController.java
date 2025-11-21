@@ -2,19 +2,15 @@ package com.project.cbs.controller;
 
 import java.sql.Time;
 import java.util.List;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-
 import com.project.cbs.dto.BidResponseDto;
 import com.project.cbs.dto.CourseDetailsDto;
 import com.project.cbs.dto.CourseWithScheduleDto;
 import com.project.cbs.dto.RoundDto;
 import com.project.cbs.dto.StudentDetailsDto;
-import com.project.cbs.dto.RoundWithBidsDto;
-import com.project.cbs.dto.BidDetailsDto;
 import com.project.cbs.dto.RoundWithBidsDto;
 import com.project.cbs.dto.BidDetailsDto;
 import com.project.cbs.model.Course;
@@ -24,430 +20,330 @@ import com.project.cbs.model.Student;
 import com.project.cbs.model.Department;
 import com.project.cbs.model.Wallet;
 import com.project.cbs.model.Bid;
-import com.project.cbs.model.Bid;
-import com.project.cbs.repository.CourseRepository;
-import com.project.cbs.repository.CourseScheduleRepository;
-import com.project.cbs.repository.StudentRepository;
-import com.project.cbs.repository.DepartmentRepository;
-import com.project.cbs.repository.WalletRepository;
-import com.project.cbs.repository.RoundRepository;
-import com.project.cbs.repository.BidRepository;
-import com.project.cbs.repository.RoundRepository;
-import com.project.cbs.repository.BidRepository;
-import com.project.cbs.service.BidService;
-import com.project.cbs.service.CourseService;
-import com.project.cbs.service.NotificationService;
-import com.project.cbs.service.RoundService;
-
+import com.project.cbs.repository.*;
+import com.project.cbs.service.*;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.SimpleJdbcCall;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
+import jakarta.annotation.PostConstruct;
 
 @RestController
 @RequestMapping("/api/admin")
-@CrossOrigin(origins = "http://localhost:5173")
+@RequiredArgsConstructor
 @Slf4j
+@CrossOrigin(origins = "http://localhost:5173")
 public class AdminController {
 
-    @Autowired
-    private StudentRepository studentRepository;
-    
-    @Autowired
-    private CourseRepository courseRepository;
-    
-    @Autowired
-    private CourseScheduleRepository courseScheduleRepository;
-    
-    @Autowired
-    private DepartmentRepository departmentRepository;
-    
-    @Autowired
-    private WalletRepository walletRepository;
-    
-    @Autowired
-    private RoundRepository roundRepository;
-    
-    @Autowired
-    private BidRepository bidRepository;
-    
-    @Autowired
+    private final StudentRepository studentRepository;
+    private final CourseRepository courseRepository;
+    private final RoundRepository roundRepository;
+    private final DepartmentRepository departmentRepository;
+    private final WalletRepository walletRepository;
+    private final BidRepository bidRepository;
+    private final RoundService roundService;
+    private final NotificationService notificationService;
+    private final AuctionRepository auctionRepository;
+
+     @Autowired
     private CourseService courseService;
-    
-    @Autowired
-    private RoundService roundService;
+ 
     
     @Autowired
     private BidService bidService;
     
+    
     @Autowired
-    private NotificationService notificationService;
-
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-
-    // ==================== COURSE MANAGEMENT ====================
+    private JdbcTemplate jdbcTemplate;
     
-    @PostMapping("/courses")
-    public ResponseEntity<?> addCourse(@RequestBody CourseWithScheduleDto courseDto) {
-        try {
-            // Create and save course
-            Course course = new Course();
-            course.setCourseName(courseDto.getCourseName());
-            course.setCourseCode(courseDto.getCourseCode());
-            course.setDeptId(courseDto.getDeptId());
-            course.setInstructorName(courseDto.getInstructorName());
-            course.setCredits(courseDto.getCredits());
-            course.setMinBid(courseDto.getMinBid());
-            course.setCapacity(courseDto.getCapacity());
-            course.setDescription(courseDto.getDescription());
-            course.setPrerequisites(courseDto.getPrerequisites());
-            course.setEnrolled(0); // Initialize enrolled count
-            
-            Long courseId = courseRepository.save(course);
-            log.info("Course saved with ID: {}", courseId);
-            
-            // Create and save schedule
-            CourseSchedule schedule = new CourseSchedule();
-            schedule.setCourseId(courseId);
-            schedule.setDayOfWeek(courseDto.getDayOfWeek());
-            schedule.setStartTime(Time.valueOf(courseDto.getStartTime() + ":00"));
-            schedule.setEndTime(Time.valueOf(courseDto.getEndTime() + ":00"));
-            schedule.setLocation(courseDto.getLocation());
-            
-            courseScheduleRepository.save(schedule);
-            log.info("Schedule saved for course ID: {}", courseId);
-            
-            notificationService.broadcastSystemNotification(
-                "New Course Added",
-                "Course " + course.getCourseName() + " has been added."
-            );
-            return ResponseEntity.ok("Course added successfully");
-        } catch (Exception e) {
-            log.error("Error adding course: ", e);
-            return ResponseEntity.badRequest().body("Error adding course: " + e.getMessage());
-        }
-    }
+    private SimpleJdbcCall processAuctionWinnersProc;
     
-    @PutMapping("/courses/{id}")
-    public ResponseEntity<?> updateCourse(@PathVariable Long id, @RequestBody CourseWithScheduleDto courseDto) {
-        try {
-            Course existing = courseRepository.findById(id);
-            if (existing == null) {
-                return ResponseEntity.badRequest().body("Course not found");
-            }
-            
-            existing.setCourseName(courseDto.getCourseName());
-            existing.setCourseCode(courseDto.getCourseCode());
-            existing.setDeptId(courseDto.getDeptId());
-            existing.setInstructorName(courseDto.getInstructorName());
-            existing.setCredits(courseDto.getCredits());
-            existing.setMinBid(courseDto.getMinBid());
-            existing.setCapacity(courseDto.getCapacity());
-            existing.setDescription(courseDto.getDescription());
-            existing.setPrerequisites(courseDto.getPrerequisites());
-            
-            courseRepository.update(existing);
-            
-            // Update schedule - delete old and insert new
-            courseScheduleRepository.deleteByCourseId(id);
-            
-            CourseSchedule schedule = new CourseSchedule();
-            schedule.setCourseId(id);
-            schedule.setDayOfWeek(courseDto.getDayOfWeek());
-            schedule.setStartTime(Time.valueOf(courseDto.getStartTime() + ":00"));
-            schedule.setEndTime(Time.valueOf(courseDto.getEndTime() + ":00"));
-            schedule.setLocation(courseDto.getLocation());
-            
-            courseScheduleRepository.save(schedule);
-            log.info("Course and schedule updated for ID: {}", id);
-            
-            return ResponseEntity.ok("Course updated successfully");
-        } catch (Exception e) {
-            log.error("Error updating course: ", e);
-            return ResponseEntity.badRequest().body("Error updating course: " + e.getMessage());
-        }
-    }
-    
-    @DeleteMapping("/courses/{id}")
-    public ResponseEntity<?> deleteCourse(@PathVariable Long id) {
-        try {
-            courseRepository.delete(id);
-            return ResponseEntity.ok("Course deleted successfully");
-        } catch (Exception e) {
-            log.error("Error deleting course: ", e);
-            return ResponseEntity.badRequest().body("Error deleting course: " + e.getMessage());
-        }
+    @PostConstruct
+    public void init() {
+        processAuctionWinnersProc = new SimpleJdbcCall(jdbcTemplate)
+            .withProcedureName("process_auction_winners");
     }
 
-    // ==================== STUDENT MANAGEMENT ====================
+    // ========== STUDENT MANAGEMENT ==========
     
-    @GetMapping("/students")
-    public ResponseEntity<List<StudentDetailsDto>> getAllStudents() {
-        List<Student> students = studentRepository.findAll();
-        List<StudentDetailsDto> studentDetails = students.stream()
-            .filter(student -> "student".equals(student.getRole())) // Only include students, not admins
-            .map(student -> {
-            StudentDetailsDto dto = new StudentDetailsDto();
-            dto.setStudentId(student.getStudentId());
-            dto.setName(student.getName());
-            dto.setEmail(student.getEmail());
-            dto.setRole(student.getRole());
-            dto.setYear(student.getYear());
-            dto.setDeptId(student.getDeptId());
-            
-            // Get department name
-            if (student.getDeptId() != null) {
-                Department dept = departmentRepository.findById(student.getDeptId());
-                if (dept != null) {
-                    dto.setDepartmentName(dept.getDeptName());
-                    dto.setDepartmentCode(dept.getDeptCode());
-                }
-            }
-            
-            // Get wallet balance
-            Wallet wallet = walletRepository.findByStudentId(student.getStudentId());
-            dto.setBidPoints(wallet != null ? wallet.getBalance() : 0);
-            
-            return dto;
-        }).collect(java.util.stream.Collectors.toList());
-        
-        return ResponseEntity.ok(studentDetails);
-    }
-
     @PostMapping("/students")
-    public ResponseEntity<?> addStudent(@RequestBody Student student) {
+public ResponseEntity<?> createStudent(@RequestBody Student student) {
+    try {
+        // Validate email doesn't already exist
+        if (studentRepository.existsByEmail(student.getEmail())) {
+            return ResponseEntity.badRequest().body("Email already exists");
+        }
+        
+        // Hash password
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        student.setPassword(encoder.encode(student.getPassword()));
+        student.setRole("student");
+        
+        // Create student
+        Long studentId = studentRepository.save(student);
+        log.info("Student created with ID: {}", studentId);
+        
+        // Check if wallet already exists (shouldn't happen, but just in case)
+        if (!walletRepository.existsByStudentId(studentId)) {
+            // Create wallet for new student
+            Wallet wallet = new Wallet();
+            wallet.setStudentId(studentId);
+            wallet.setBalance(100);  // Default starting balance
+            wallet.setTotalSpent(0);
+            
+            Long walletId = walletRepository.save(wallet);
+            log.info("Wallet created for student {} with ID: {}", studentId, walletId);
+        } else {
+            log.warn("Wallet already exists for student {}", studentId);
+        }
+        
+        return ResponseEntity.ok("Student created successfully with ID: " + studentId);
+    } catch (Exception e) {
+        log.error("Error creating student: ", e);
+        return ResponseEntity.badRequest().body(e.getMessage());
+    }
+}
+
+
+    @GetMapping("/students")
+    public ResponseEntity<?> getAllStudents() {
         try {
-            log.info("Adding student: {}", student.getEmail());
-            
-            // Check if email already exists
-            if (studentRepository.findByEmail(student.getEmail()).isPresent()) {
-                return ResponseEntity.badRequest().body("Error adding student: Email already exists");
-            }
-            
-            student.setPassword(passwordEncoder.encode(student.getPassword()));
-            
-            if (student.getRole() == null || student.getRole().isEmpty()) {
-                student.setRole("student");
-            }
-            
-            int result = studentRepository.save(student);
-            log.info("Student saved with result: {}", result);
-            
-            // Send notification about new student
-            notificationService.broadcastSystemNotification(
-                "New Student Added",
-                "A new student " + student.getName() + " has been added to the system."
-            );
-            
-            return ResponseEntity.ok("Student added successfully");
+            List<Student> students = studentRepository.findAll();
+            List<StudentDetailsDto> studentDetails = students.stream()
+                .map(this::convertToStudentDetailsDto)
+                .toList();
+            return ResponseEntity.ok(studentDetails);
         } catch (Exception e) {
-            log.error("Error adding student: ", e);
-            return ResponseEntity.badRequest().body("Error adding student: " + e.getMessage());
+            log.error("Error fetching students: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/students/{id}")
+    public ResponseEntity<?> getStudentById(@PathVariable Long id) {
+        try {
+            Student student = studentRepository.findById(id);
+            if (student == null) {
+                return ResponseEntity.badRequest().body("Student not found");
+            }
+            return ResponseEntity.ok(convertToStudentDetailsDto(student));
+        } catch (Exception e) {
+            log.error("Error fetching student: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PutMapping("/students/{id}")
+    public ResponseEntity<?> updateStudent(@PathVariable Long id, @RequestBody Student student) {
+        try {
+            student.setStudentId(id);
+            studentRepository.update(student);
+            log.info("Student {} updated", id);
+            return ResponseEntity.ok("Student updated successfully");
+        } catch (Exception e) {
+            log.error("Error updating student: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
     @DeleteMapping("/students/{id}")
     public ResponseEntity<?> deleteStudent(@PathVariable Long id) {
         try {
-            studentRepository.deleteById(id);
-            notificationService.broadcastSystemNotification(
-                "Student Deleted",
-                "A student has been removed from the system."
-            );
+            studentRepository.delete(id);
+            log.info("Student {} deleted", id);
             return ResponseEntity.ok("Student deleted successfully");
         } catch (Exception e) {
             log.error("Error deleting student: ", e);
-            return ResponseEntity.badRequest().body("Error deleting student: " + e.getMessage());
-        }
-    }
-    
-    @PutMapping("/students/{id}")
-    public ResponseEntity<?> updateStudent(@PathVariable Long id, @RequestBody Student student) {
-        try {
-            Student existing = studentRepository.findById(id);
-            if (existing == null) {
-                return ResponseEntity.badRequest().body("Student not found");
-            }
-            
-            existing.setName(student.getName());
-            existing.setEmail(student.getEmail());
-            if (student.getPassword() != null && !student.getPassword().isEmpty()) {
-                existing.setPassword(passwordEncoder.encode(student.getPassword()));
-            }
-            existing.setYear(student.getYear());
-            existing.setDeptId(student.getDeptId());
-            
-            studentRepository.update(existing);
-            notificationService.broadcastSystemNotification(
-                "Student Updated",
-                "Student information has been updated."
-            );
-            return ResponseEntity.ok("Student updated successfully");
-        } catch (Exception e) {
-            log.error("Error updating student: ", e);
-            return ResponseEntity.badRequest().body("Error updating student: " + e.getMessage());
-        }
-    }
-    
-    // ==================== ROUND MANAGEMENT ====================
-    
-    @GetMapping("/rounds")
-    public ResponseEntity<List<Round>> getAllRounds() {
-        return ResponseEntity.ok(roundRepository.findAll());
-    }
-    
-    @GetMapping("/rounds/{id}")
-    public ResponseEntity<?> getRoundWithBids(@PathVariable Integer id) {
-        try {
-            Round round = roundRepository.findById(id);
-            if (round == null) {
-                return ResponseEntity.badRequest().body("Round not found");
-            }
-            
-            RoundWithBidsDto dto = new RoundWithBidsDto();
-            dto.setRoundId(round.getRoundId());
-            dto.setRoundNumber(round.getRoundNumber());
-            dto.setRoundName(round.getRoundName());
-            dto.setStartTime(round.getStartTime());
-            dto.setEndTime(round.getEndTime());
-            dto.setStatus(round.getStatus());
-            dto.setProcessedAt(round.getProcessedAt());
-            
-            // Get all bids for this round with student and course details
-            List<Bid> bids = bidRepository.findByRoundId(id);
-            dto.setTotalBids(bids.size());
-            
-            List<BidDetailsDto> bidDetails = bids.stream().map(bid -> {
-                BidDetailsDto detail = new BidDetailsDto();
-                detail.setBidId(bid.getBidId());
-                detail.setStudentId(bid.getStudentId());
-                detail.setCourseId(bid.getCourseId());
-                detail.setRoundId(bid.getRoundId());
-                detail.setBidAmount(bid.getBidAmount());
-                detail.setStatus(bid.getStatus());
-                detail.setPriority(bid.getPriority());
-                detail.setCreatedAt(bid.getCreatedAt());
-                
-                // Get student details
-                Student student = studentRepository.findById(bid.getStudentId());
-                if (student != null) {
-                    detail.setStudentName(student.getName());
-                    detail.setStudentEmail(student.getEmail());
-                }
-                
-                // Get course details
-                Course course = courseRepository.findById(bid.getCourseId());
-                if (course != null) {
-                    detail.setCourseCode(course.getCourseCode());
-                    detail.setCourseName(course.getCourseName());
-                }
-                
-                return detail;
-            }).collect(java.util.stream.Collectors.toList());
-            
-            dto.setBids(bidDetails);
-            
-            return ResponseEntity.ok(dto);
-        } catch (Exception e) {
-            log.error("Error fetching round with bids: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    
-    @PostMapping("/rounds")
-    public ResponseEntity<?> createRound(@RequestBody Round round) {
+
+    // ========== COURSE MANAGEMENT ==========
+
+    @PostMapping("/courses")
+    public ResponseEntity<?> createCourse(@RequestBody CourseWithScheduleDto courseDto) {
         try {
-            log.info("Admin creating new round: {}", round.getRoundName());
-            
-            // Set default status if not provided
-            if (round.getStatus() == null || round.getStatus().isEmpty()) {
-                round.setStatus("pending");
-            }
-            
+            Course course = new Course();
+            course.setCourseCode(courseDto.getCourseCode());
+            course.setCourseName(courseDto.getCourseName());
+            course.setDeptId(courseDto.getDeptId());
+            course.setInstructorName(courseDto.getInstructorName());
+            course.setCredits(courseDto.getCredits());
+            course.setCapacity(courseDto.getCapacity());
+            course.setEnrolled(0);
+            course.setMinBid(courseDto.getMinBid());
+            course.setDescription(courseDto.getDescription());
+            course.setPrerequisites(courseDto.getPrerequisites());
+
+            Long courseId = courseRepository.save(course);
+
+            // Save schedule if provided
+            CourseSchedule schedule = new CourseSchedule();
+            schedule.setCourseId(courseId);
+            schedule.setDayOfWeek(courseDto.getDayOfWeek());
+            schedule.setStartTime(Time.valueOf(courseDto.getStartTime() + ":00"));
+            schedule.setEndTime(Time.valueOf(courseDto.getEndTime() + ":00"));
+            schedule.setLocation(courseDto.getLocation());
+
+            log.info("Course created with ID: {}", courseId);
+            return ResponseEntity.ok("Course created successfully with ID: " + courseId);
+        } catch (Exception e) {
+            log.error("Error creating course: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/courses")
+    public ResponseEntity<?> getAllCourses() {
+        try {
+            List<Course> courses = courseRepository.findAll();
+            List<CourseDetailsDto> courseDetails = courses.stream()
+                .map(this::convertToCourseDetailsDto)
+                .toList();
+            return ResponseEntity.ok(courseDetails);
+        } catch (Exception e) {
+            log.error("Error fetching courses: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PutMapping("/courses/{id}")
+    public ResponseEntity<?> updateCourse(@PathVariable Long id, @RequestBody Course course) {
+        try {
+            course.setCourseId(id);
+            courseRepository.update(course);
+            log.info("Course {} updated", id);
+            return ResponseEntity.ok("Course updated successfully");
+        } catch (Exception e) {
+            log.error("Error updating course: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/courses/{id}")
+    public ResponseEntity<?> deleteCourse(@PathVariable Long id) {
+        try {
+            courseRepository.delete(id);
+            log.info("Course {} deleted", id);
+            return ResponseEntity.ok("Course deleted successfully");
+        } catch (Exception e) {
+            log.error("Error deleting course: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // ========== ROUND MANAGEMENT ==========
+
+    @PostMapping("/rounds")
+    public ResponseEntity<?> createRound(@RequestBody RoundDto roundDto) {
+        try {
+            Round round = new Round();
+            round.setRoundNumber(roundDto.getRoundNumber());
+            round.setRoundName(roundDto.getRoundName());
+            round.setStartTime(java.sql.Timestamp.valueOf(roundDto.getStartTime()));
+            round.setEndTime(java.sql.Timestamp.valueOf(roundDto.getEndTime()));
+            round.setStatus("scheduled");
+
             Integer roundId = roundRepository.save(round);
-            round.setRoundId(roundId);
-            
-            notificationService.broadcastSystemNotification(
-                "New Round Created: " + round.getRoundName(),
-                "A new bidding round has been created. Get ready to place your bids!"
-            );
-            
-            return ResponseEntity.ok(round);
+            log.info("Round created with ID: {}", roundId);
+            return ResponseEntity.ok("Round created successfully with ID: " + roundId);
         } catch (Exception e) {
             log.error("Error creating round: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    
-    @PutMapping("/rounds/{id}")
-    public ResponseEntity<?> updateRound(@PathVariable Integer id, @RequestBody Round round) {
+
+    @GetMapping("/rounds")
+    public ResponseEntity<?> getAllRounds() {
         try {
-            Round existing = roundRepository.findById(id);
-            if (existing == null) {
-                return ResponseEntity.badRequest().body("Round not found");
-            }
-            
-            existing.setRoundName(round.getRoundName());
-            existing.setRoundNumber(round.getRoundNumber());
-            existing.setStartTime(round.getStartTime());
-            existing.setEndTime(round.getEndTime());
-            existing.setStatus(round.getStatus());
-            
-            roundRepository.update(existing);
-            
-            return ResponseEntity.ok(existing);
+            List<RoundDto> rounds = roundService.getAllRounds();
+            return ResponseEntity.ok(rounds);
         } catch (Exception e) {
-            log.error("Error updating round: ", e);
+            log.error("Error fetching rounds: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    
-    @DeleteMapping("/rounds/{id}")
-    public ResponseEntity<?> deleteRound(@PathVariable Integer id) {
-        try {
-            log.info("Admin deleting round: {}", id);
-            roundRepository.delete(id);
-            return ResponseEntity.ok("Round deleted successfully");
-        } catch (Exception e) {
-            log.error("Error deleting round: ", e);
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
-    }
-    
-    @PutMapping("/rounds/{id}/activate")
+
+    @PostMapping("/rounds/{id}/activate")
     public ResponseEntity<?> activateRound(@PathVariable Integer id) {
         try {
-            log.info("Admin activating round: {}", id);
-            Round round = roundRepository.findById(id);
-            if (round == null) {
-                return ResponseEntity.badRequest().body("Round not found");
-            }
-            
-            roundRepository.updateStatus(id, "active");
-            
-            notificationService.broadcastSystemNotification(
-                "Round Started: " + round.getRoundName(),
-                "Bidding round has been activated. Start placing your bids now!"
-            );
-            
+            roundService.activateRound(id);
+            log.info("Round {} activated", id);
             return ResponseEntity.ok("Round activated successfully");
         } catch (Exception e) {
             log.error("Error activating round: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    
-    @PostMapping("/rounds/{id}/process")
-    public ResponseEntity<?> processRound(@PathVariable Integer id) {
+
+    /**
+     * Process auction for a specific course using process_auction_winners stored procedure
+     * The stored procedure handles:
+     * - Determining winners based on highest bids
+     * - Creating enrollment records for winners
+     * - Updating course enrollment count
+     * - Deducting winning bid amounts from wallets
+     * - Adding losers to waitlist
+     * - Updating bid statuses
+     */
+    @PostMapping("/rounds/{roundId}/process-course/{courseId}")
+    public ResponseEntity<?> processAuctionForCourse(
+            @PathVariable Integer roundId, 
+            @PathVariable Integer courseId) {
         try {
-            log.info("Admin processing round: {}", id);
-            roundService.processRound(id);
-            return ResponseEntity.ok("Round processed successfully");
+            log.info("Admin processing auction for round {} and course {}", roundId, courseId);
+            
+            Course course = courseRepository.findById(courseId.longValue());
+            if (course == null) {
+                return ResponseEntity.badRequest().body("Course not found");
+            }
+            
+            // Call process_auction_winners stored procedure
+            auctionRepository.processAuctionWinners(roundId, courseId);
+            
+            notificationService.broadcastSystemNotification(
+                "Auction Processed",
+                "Winners have been determined for " + course.getCourseCode() + " - " + course.getCourseName()
+            );
+            
+            log.info("Auction processed successfully for course {}", courseId);
+            return ResponseEntity.ok("Auction processed successfully for course: " + course.getCourseCode());
         } catch (Exception e) {
-            log.error("Error processing round: ", e);
+            log.error("Error processing auction: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    
-    // ==================== BID MANAGEMENT ====================
-    
+
+    /**
+     * Process all courses in a round using process_auction_winners stored procedure
+     */
+    @PostMapping("/rounds/{id}/process-all")
+    public ResponseEntity<?> processAllAuctions(@PathVariable Integer id) {
+        try {
+            log.info("Admin processing all auctions for round {}", id);
+            
+            Round round = roundRepository.findById(id);
+            if (round == null) {
+                return ResponseEntity.badRequest().body("Round not found");
+            }
+            
+            if (!"active".equals(round.getStatus())) {
+                return ResponseEntity.badRequest().body("Can only process active rounds");
+            }
+            
+            // Use RoundService which calls process_auction_winners for each course
+            roundService.processRound(id);
+            
+            log.info("All auctions processed successfully for round {}", id);
+            return ResponseEntity.ok("All auctions processed successfully for round: " + round.getRoundName());
+        } catch (Exception e) {
+            log.error("Error processing all auctions: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
     @GetMapping("/bids")
     public ResponseEntity<?> getAllBids() {
         try {
@@ -458,15 +354,90 @@ public class AdminController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    
-    @GetMapping("/bids/round/{roundId}")
-    public ResponseEntity<?> getBidsByRound(@PathVariable Integer roundId) {
+
+    @GetMapping("/rounds/{id}/bids")
+    public ResponseEntity<?> getBidsByRound(@PathVariable Integer id) {
         try {
-            List<BidResponseDto> bids = bidService.getBidsByRound(roundId);
-            return ResponseEntity.ok(bids);
+            List<Bid> bids = bidRepository.findByRoundId(id);
+            List<BidDetailsDto> bidDetails = bids.stream()
+                .map(this::convertToBidDetailsDto)
+                .toList();
+            return ResponseEntity.ok(bidDetails);
         } catch (Exception e) {
-            log.error("Error fetching bids by round: ", e);
+            log.error("Error fetching bids: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
+    }
+
+    // ========== DEPARTMENT MANAGEMENT ==========
+
+    @GetMapping("/departments")
+    public ResponseEntity<?> getAllDepartments() {
+        try {
+            List<Department> departments = departmentRepository.findAll();
+            return ResponseEntity.ok(departments);
+        } catch (Exception e) {
+            log.error("Error fetching departments: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // ========== HELPER METHODS ==========
+
+    private StudentDetailsDto convertToStudentDetailsDto(Student student) {
+        Department dept = departmentRepository.findById(student.getDeptId());
+        Wallet wallet = walletRepository.findByStudentId(student.getStudentId());
+        
+        StudentDetailsDto dto = new StudentDetailsDto();
+        dto.setStudentId(student.getStudentId());
+        dto.setName(student.getName());
+        dto.setEmail(student.getEmail());
+        dto.setYear(student.getYear());
+        dto.setDepartmentName(dept != null ? dept.getDeptName() : "N/A");
+        dto.setRole(student.getRole());
+        dto.setBidPoints(wallet != null ? wallet.getBalance() : 0);
+        return dto;
+    }
+
+    private CourseDetailsDto convertToCourseDetailsDto(Course course) {
+        Department dept = departmentRepository.findById(course.getDeptId());
+        
+        CourseDetailsDto dto = new CourseDetailsDto();
+        dto.setCourseId(course.getCourseId());
+        dto.setCourseCode(course.getCourseCode());
+        dto.setCourseName(course.getCourseName());
+        dto.setDepartmentName(dept != null ? dept.getDeptName() : "N/A");
+        dto.setDepartmentCode(dept != null ? dept.getDeptCode() : "N/A");
+        dto.setInstructorName(course.getInstructorName());
+        dto.setCredits(course.getCredits());
+        dto.setCapacity(course.getCapacity());
+        dto.setEnrolled(course.getEnrolled());
+        dto.setAvailableSeats(course.getCapacity() - course.getEnrolled());
+        dto.setMinBid(course.getMinBid());
+        dto.setDescription(course.getDescription());
+        dto.setPrerequisites(course.getPrerequisites());
+        
+        // Use is_course_full() function
+        dto.setIsFull(courseRepository.isCourseFull(course.getCourseId().intValue()));
+        
+        return dto;
+    }
+
+    private BidDetailsDto convertToBidDetailsDto(Bid bid) {
+        Student student = studentRepository.findById(bid.getStudentId());
+        Course course = courseRepository.findById(bid.getCourseId());
+        
+        BidDetailsDto dto = new BidDetailsDto();
+        dto.setBidId(bid.getBidId());
+        dto.setStudentId(bid.getStudentId());
+        dto.setStudentName(student != null ? student.getName() : "N/A");
+        dto.setCourseId(bid.getCourseId());
+        dto.setCourseCode(course != null ? course.getCourseCode() : "N/A");
+        dto.setRoundId(bid.getRoundId());
+        dto.setBidAmount(bid.getBidAmount());
+        dto.setStatus(bid.getStatus());
+        dto.setPriority(bid.getPriority());
+        dto.setCreatedAt(bid.getCreatedAt() != null ? bid.getCreatedAt().toString() : null);
+        return dto;
     }
 }

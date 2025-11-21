@@ -13,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -28,70 +27,74 @@ public class BidServiceImpl implements BidService {
     private final WalletRepository walletRepository;
     private final NotificationService notificationService;
 
+    /**
+     * Place a bid using sp_place_bid stored procedure
+     * The stored procedure handles all validation and transactional logic:
+     * - Validates wallet balance
+     * - Validates minimum bid amount
+     * - Checks for duplicate bids
+     * - Deducts from wallet
+     * - Creates/updates bid record
+     */
     @Override
     @Transactional
     public BidResponseDto placeBid(Long studentId, BidRequestDto request, Integer roundId) {
-        log.info("Student {} placing bid for course {} with amount {}", studentId, request.getCourseId(), request.getBidAmount());
-        
+        log.info("Student {} placing bid for course {} with amount {}", 
+                studentId, request.getCourseId(), request.getBidAmount());
+
         // Validate course exists
         Course course = courseRepository.findById(request.getCourseId());
         if (course == null) {
             throw new RuntimeException("Course not found");
         }
-        
+
         // Validate round exists and is active
         Round round = roundRepository.findById(roundId);
         if (round == null || !"active".equals(round.getStatus())) {
             throw new RuntimeException("Round is not active");
         }
-        
+
         // Validate minimum bid
         if (request.getBidAmount() < course.getMinBid()) {
             throw new RuntimeException("Bid amount must be at least " + course.getMinBid() + " points");
         }
-        
-        // Check if student already has a bid for this course in this round
-        Bid existingBid = bidRepository.findByStudentAndCourseAndRound(studentId, request.getCourseId(), roundId);
-        
-        // Calculate total bid amount for this student in this round
-        Integer currentTotalBids = bidRepository.getTotalBidAmountByStudentAndRound(studentId, roundId);
-        if (existingBid != null) {
-            // Subtract existing bid amount since it will be updated
-            currentTotalBids -= existingBid.getBidAmount();
+
+        try {
+            // Call the stored procedure sp_place_bid
+            // This handles all the complex logic atomically in the database
+            bidRepository.placeBidUsingStoredProcedure(
+                studentId, 
+                request.getCourseId(), 
+                roundId, 
+                request.getBidAmount()
+            );
+            
+            log.info("Bid placed successfully using stored procedure");
+            
+            // Send notification
+            notificationService.sendToUser(
+                studentId,
+                "Bid Placed Successfully",
+                "Your bid of " + request.getBidAmount() + " points for " + 
+                course.getCourseCode() + " has been placed.",
+                "success"
+            );
+            
+            // Fetch the created/updated bid to return
+            Bid bid = bidRepository.findByStudentAndCourseAndRound(
+                studentId, request.getCourseId(), roundId
+            );
+            
+            if (bid == null) {
+                throw new RuntimeException("Bid was placed but could not be retrieved");
+            }
+            
+            return convertToDto(bid, course, round);
+            
+        } catch (Exception e) {
+            log.error("Error placing bid: {}", e.getMessage());
+            throw new RuntimeException(e.getMessage());
         }
-        
-        // Check wallet balance
-        Integer balance = walletRepository.getBalance(studentId);
-        if (balance < currentTotalBids + request.getBidAmount()) {
-            throw new RuntimeException("Insufficient balance. Available: " + balance + ", Required: " + (currentTotalBids + request.getBidAmount()));
-        }
-        
-        // Create or update bid
-        Bid bid = new Bid();
-        bid.setStudentId(studentId);
-        bid.setCourseId(request.getCourseId());
-        bid.setRoundId(roundId);
-        bid.setBidAmount(request.getBidAmount());
-        bid.setStatus("pending");
-        
-        Long bidId;
-        
-        if (existingBid != null) {
-            // Update existing bid - refund old amount, deduct new amount
-            walletRepository.addPoints(studentId, existingBid.getBidAmount()); // Refund old bid
-            walletRepository.deductPoints(studentId, request.getBidAmount()); // Deduct new bid
-            bid.setBidId(existingBid.getBidId());
-            bidRepository.update(bid);
-            bidId = existingBid.getBidId();
-            log.info("Updated bid {} for student {}: {} -> {} points", bidId, studentId, existingBid.getBidAmount(), request.getBidAmount());
-        } else {
-            // New bid - deduct points immediately
-            walletRepository.deductPoints(studentId, request.getBidAmount());
-            bidId = bidRepository.save(bid);
-            log.info("Created new bid {} for student {}: {} points deducted", bidId, studentId, request.getBidAmount());
-        }
-        
-        return convertToDto(bidRepository.findById(bidId), course, round);
     }
 
     @Override
@@ -117,17 +120,33 @@ public class BidServiceImpl implements BidService {
         if (bid == null) {
             throw new RuntimeException("Bid not found");
         }
-        
+
         if (!bid.getStudentId().equals(studentId)) {
             throw new RuntimeException("Not authorized to cancel this bid");
         }
-        
+
         if (!"pending".equals(bid.getStatus())) {
             throw new RuntimeException("Can only cancel pending bids");
         }
-        
+
+        // Get course info for notification
+        Course course = courseRepository.findById(bid.getCourseId());
+
+        // Refund the bid amount before deleting
+        walletRepository.addPoints(studentId, bid.getBidAmount());
         bidRepository.delete(bidId);
-        log.info("Bid {} cancelled by student {}", bidId, studentId);
+        
+        log.info("Bid {} cancelled by student {}, {} points refunded", 
+                bidId, studentId, bid.getBidAmount());
+        
+        // Send notification
+        notificationService.sendToUser(
+            studentId,
+            "Bid Cancelled",
+            "Your bid for " + (course != null ? course.getCourseCode() : "course") + 
+            " has been cancelled and " + bid.getBidAmount() + " points have been refunded.",
+            "info"
+        );
     }
 
     @Override
@@ -145,7 +164,19 @@ public class BidServiceImpl implements BidService {
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
     }
+    
+    /**
+     * Get the latest bid for a student on a course in a specific round
+     */
+    public BidResponseDto getLatestBid(Long studentId, Long courseId, Integer roundId) {
+        Bid bid = bidRepository.findByStudentAndCourseAndRound(studentId, courseId, roundId);
+        if (bid == null) {
+            throw new RuntimeException("Bid not found");
+        }
+        return convertToDto(bid);
+    }
 
+    // Helper methods for DTO conversion
     private BidResponseDto convertToDto(Bid bid) {
         Course course = courseRepository.findById(bid.getCourseId());
         Round round = roundRepository.findById(bid.getRoundId());

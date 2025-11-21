@@ -1,20 +1,21 @@
 package com.project.cbs.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
-import java.sql.Timestamp;
+import lombok.NoArgsConstructor;
 
 @Data
+@AllArgsConstructor
+@NoArgsConstructor
 public class BidDetailsDto {
     private Long bidId;
     private Long studentId;
     private String studentName;
-    private String studentEmail;
     private Long courseId;
     private String courseCode;
-    private String courseName;
     private Integer roundId;
     private Integer bidAmount;
     private String status;
     private Integer priority;
-    private Timestamp createdAt;
+    private String createdAt;  // Make sure this is String, not Timestamp
 }

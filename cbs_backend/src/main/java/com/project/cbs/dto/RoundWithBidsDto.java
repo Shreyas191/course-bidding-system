@@ -1,18 +1,21 @@
 package com.project.cbs.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
-import java.sql.Timestamp;
+import lombok.NoArgsConstructor;
 import java.util.List;
 
 @Data
+@AllArgsConstructor
+@NoArgsConstructor
 public class RoundWithBidsDto {
     private Integer roundId;
-    private Integer roundNumber;
     private String roundName;
-    private Timestamp startTime;
-    private Timestamp endTime;
     private String status;
-    private Timestamp processedAt;
+    private String startTime;
+    private String endTime;
     private Integer totalBids;
+    private Integer totalStudents;
+    private Integer totalCourses;
     private List<BidDetailsDto> bids;
 }

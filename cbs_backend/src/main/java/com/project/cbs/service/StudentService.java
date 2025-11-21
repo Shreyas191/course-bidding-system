@@ -8,4 +8,5 @@ public interface StudentService {
     // - updateStudent(Long id, StudentDTO dto)
     // - deleteStudent(Long id)
     // - getStudentProfile(Long id)
+    public Object getStudentProfile(Long studentId);
 }

@@ -22,5 +22,9 @@ public class CourseDetailsDto {
     private Integer minBid;
     private String description;
     private String prerequisites;
+    
+    // NEW: Result from is_course_full() function
+    private Boolean isFull;
+    
     private List<ScheduleDto> schedule;
 }

@@ -5,10 +5,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.simple.SimpleJdbcCall;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
-
+import jakarta.annotation.PostConstruct;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.List;
@@ -19,6 +22,14 @@ import java.util.List;
 public class BidRepository {
 
     private final JdbcTemplate jdbcTemplate;
+    
+    private SimpleJdbcCall placeABidProc;
+    
+    @PostConstruct
+    public void init() {
+        placeABidProc = new SimpleJdbcCall(jdbcTemplate)
+            .withProcedureName("sp_place_bid");
+    }
 
     private final RowMapper<Bid> bidRowMapper = (rs, rowNum) -> {
         Bid bid = new Bid();
@@ -33,6 +44,32 @@ public class BidRepository {
         bid.setUpdatedAt(rs.getTimestamp("updated_at"));
         return bid;
     };
+    
+    /**
+     * Place a bid using sp_place_bid stored procedure
+     * The stored procedure handles:
+     * - Wallet balance validation
+     * - Minimum bid amount validation
+     * - Duplicate bid checking
+     * - Wallet deduction
+     * - Bid creation/update
+     */
+    public void placeBidUsingStoredProcedure(Long studentId, Long courseId, Integer roundId, Integer bidAmount) {
+        SqlParameterSource params = new MapSqlParameterSource()
+            .addValue("p_student_id", studentId)
+            .addValue("p_course_id", courseId)
+            .addValue("p_round_id", roundId)
+            .addValue("p_bid_amount", bidAmount);
+        
+        try {
+            placeABidProc.execute(params);
+            log.info("Bid placed using stored procedure for student {} on course {} with amount {}", 
+                     studentId, courseId, bidAmount);
+        } catch (Exception e) {
+            log.error("Error placing bid using stored procedure: {}", e.getMessage());
+            throw new RuntimeException("Failed to place bid: " + e.getMessage());
+        }
+    }
 
     public List<Bid> findAll() {
         String sql = "SELECT * FROM bid ORDER BY created_at DESC";
@@ -76,59 +113,9 @@ public class BidRepository {
     }
 
     public List<Bid> findPendingBidsByRound(Integer roundId) {
-        String sql = "SELECT * FROM bid WHERE round_id = ? AND status = 'pending' ORDER BY course_id, bid_amount DESC, created_at ASC";
+        String sql = "SELECT * FROM bid WHERE round_id = ? AND status = 'pending' " +
+                     "ORDER BY course_id, bid_amount DESC, created_at ASC";
         return jdbcTemplate.query(sql, bidRowMapper, roundId);
-    }
-
-    public Long save(Bid bid) {
-        String sql = "INSERT INTO bid (student_id, course_id, round_id, bid_amount, status, priority) " +
-                     "VALUES (?, ?, ?, ?, ?, ?) " +
-                     "ON DUPLICATE KEY UPDATE bid_amount = VALUES(bid_amount), status = VALUES(status), priority = VALUES(priority)";
-        
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            ps.setLong(1, bid.getStudentId());
-            ps.setLong(2, bid.getCourseId());
-            ps.setInt(3, bid.getRoundId());
-            ps.setInt(4, bid.getBidAmount());
-            ps.setString(5, bid.getStatus() != null ? bid.getStatus() : "pending");
-            ps.setInt(6, bid.getPriority() != null ? bid.getPriority() : 0);
-            return ps;
-        }, keyHolder);
-        
-        return keyHolder.getKey() != null ? keyHolder.getKey().longValue() : null;
-    }
-
-    public void updateStatus(Long bidId, String status) {
-        String sql = "UPDATE bid SET status = ? WHERE bid_id = ?";
-        jdbcTemplate.update(sql, status, bidId);
-    }
-
-    public void update(Bid bid) {
-        String sql = "UPDATE bid SET bid_amount = ?, status = ? WHERE bid_id = ?";
-        jdbcTemplate.update(sql, bid.getBidAmount(), bid.getStatus(), bid.getBidId());
-    }
-
-    public void updateBidAmount(Long bidId, Integer newAmount) {
-        String sql = "UPDATE bid SET bid_amount = ? WHERE bid_id = ?";
-        jdbcTemplate.update(sql, newAmount, bidId);
-    }
-
-    public void delete(Long bidId) {
-        String sql = "DELETE FROM bid WHERE bid_id = ?";
-        jdbcTemplate.update(sql, bidId);
-    }
-
-    public Integer getTotalBidAmountByStudentAndRound(Long studentId, Integer roundId) {
-        String sql = "SELECT COALESCE(SUM(bid_amount), 0) FROM bid WHERE student_id = ? AND round_id = ? AND status = 'pending'";
-        return jdbcTemplate.queryForObject(sql, Integer.class, studentId, roundId);
-    }
-
-    public boolean existsByStudentCourseRound(Long studentId, Long courseId, Integer roundId) {
-        String sql = "SELECT COUNT(*) FROM bid WHERE student_id = ? AND course_id = ? AND round_id = ?";
-        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, studentId, courseId, roundId);
-        return count != null && count > 0;
     }
 
     public Bid findByStudentAndCourseAndRound(Long studentId, Long courseId, Integer roundId) {
@@ -143,7 +130,59 @@ public class BidRepository {
     }
 
     public List<Bid> findPendingBidsByRoundId(Integer roundId) {
-        String sql = "SELECT * FROM bid WHERE round_id = ? AND status = 'pending' ORDER BY course_id, bid_amount DESC, created_at ASC";
+        String sql = "SELECT * FROM bid WHERE round_id = ? AND status = 'pending' " +
+                     "ORDER BY course_id, bid_amount DESC, created_at ASC";
         return jdbcTemplate.query(sql, bidRowMapper, roundId);
+    }
+
+    // Traditional save method (kept for backward compatibility)
+    public Long save(Bid bid) {
+        String sql = "INSERT INTO bid (student_id, course_id, round_id, bid_amount, status, priority) " +
+                "VALUES (?, ?, ?, ?, ?, ?) " +
+                "ON DUPLICATE KEY UPDATE bid_amount = VALUES(bid_amount), status = VALUES(status), priority = VALUES(priority)";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setLong(1, bid.getStudentId());
+            ps.setLong(2, bid.getCourseId());
+            ps.setInt(3, bid.getRoundId());
+            ps.setInt(4, bid.getBidAmount());
+            ps.setString(5, bid.getStatus() != null ? bid.getStatus() : "pending");
+            ps.setInt(6, bid.getPriority() != null ? bid.getPriority() : 0);
+            return ps;
+        }, keyHolder);
+        return keyHolder.getKey() != null ? keyHolder.getKey().longValue() : null;
+    }
+
+    public void updateStatus(Long bidId, String status) {
+        String sql = "UPDATE bid SET status = ?, updated_at = NOW() WHERE bid_id = ?";
+        jdbcTemplate.update(sql, status, bidId);
+    }
+
+    public void update(Bid bid) {
+        String sql = "UPDATE bid SET bid_amount = ?, status = ?, updated_at = NOW() WHERE bid_id = ?";
+        jdbcTemplate.update(sql, bid.getBidAmount(), bid.getStatus(), bid.getBidId());
+    }
+
+    public void updateBidAmount(Long bidId, Integer newAmount) {
+        String sql = "UPDATE bid SET bid_amount = ?, updated_at = NOW() WHERE bid_id = ?";
+        jdbcTemplate.update(sql, newAmount, bidId);
+    }
+
+    public void delete(Long bidId) {
+        String sql = "DELETE FROM bid WHERE bid_id = ?";
+        jdbcTemplate.update(sql, bidId);
+    }
+
+    public Integer getTotalBidAmountByStudentAndRound(Long studentId, Integer roundId) {
+        String sql = "SELECT COALESCE(SUM(bid_amount), 0) FROM bid " +
+                     "WHERE student_id = ? AND round_id = ? AND status = 'pending'";
+        return jdbcTemplate.queryForObject(sql, Integer.class, studentId, roundId);
+    }
+
+    public boolean existsByStudentCourseRound(Long studentId, Long courseId, Integer roundId) {
+        String sql = "SELECT COUNT(*) FROM bid WHERE student_id = ? AND course_id = ? AND round_id = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, studentId, courseId, roundId);
+        return count != null && count > 0;
     }
 }
