@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, BookOpen, TrendingUp, DollarSign, Plus, Edit2, Trash2, 
   Search, X, Save, CheckCircle, AlertCircle, LogOut, Home as HomeIcon,
-  Calendar, Clock, MapPin, Eye, Activity
+  Calendar, Clock, MapPin, Eye, Activity, List, UserCheck
 } from 'lucide-react';
 
 const AdminDashboard = ({ handleLogout }) => {
@@ -15,6 +15,8 @@ const AdminDashboard = ({ handleLogout }) => {
   const [selectedRound, setSelectedRound] = useState(null);
   const [roundBids, setRoundBids] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [waitlists, setWaitlists] = useState([]);
+  const [courseWaitlists, setCourseWaitlists] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,6 +92,7 @@ const AdminDashboard = ({ handleLogout }) => {
     if (currentTab === 'courses') fetchCourses();
     else if (currentTab === 'students') fetchStudents();
     else if (currentTab === 'bids') fetchRounds();
+    else if (currentTab === 'waitlists') fetchAllWaitlists();
   }, [currentTab]);
 
   // Helper function to get round status based on real-time
@@ -247,6 +250,99 @@ const AdminDashboard = ({ handleLogout }) => {
       setError('Failed to fetch round bids');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAllWaitlists = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('http://localhost:8080/api/admin/waitlists', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setWaitlists(data);
+      }
+    } catch (err) {
+      setError('Failed to fetch waitlists');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCourseWaitlist = async (courseId) => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/waitlist/course/${courseId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCourseWaitlists(prev => ({ ...prev, [courseId]: data }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch course waitlist:', err);
+    }
+  };
+
+  const handlePromoteFromWaitlist = async (courseId) => {
+    if (!window.confirm('Promote the next student from the waitlist for this course?')) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/waitlist/promote/${courseId}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        alert('Student promoted from waitlist successfully!');
+        fetchAllWaitlists();
+        fetchCourses();
+      } else {
+        throw new Error('Failed to promote student');
+      }
+    } catch (err) {
+      alert('Error promoting student: ' + err.message);
+    }
+  };
+
+  const handleProcessAllWaitlists = async () => {
+    if (!window.confirm('Process all waitlists system-wide? This will promote eligible students from all waitlists.')) return;
+    
+    try {
+      const response = await fetch('http://localhost:8080/api/admin/waitlist/process-all', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        alert('All waitlists processed successfully!');
+        fetchAllWaitlists();
+        fetchCourses();
+      } else {
+        throw new Error('Failed to process waitlists');
+      }
+    } catch (err) {
+      alert('Error processing waitlists: ' + err.message);
+    }
+  };
+
+  const handleRemoveFromWaitlist = async (waitlistId) => {
+    if (!window.confirm('Remove this student from the waitlist?')) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/waitlist/${waitlistId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        alert('Student removed from waitlist successfully!');
+        fetchAllWaitlists();
+      } else {
+        throw new Error('Failed to remove student');
+      }
+    } catch (err) {
+      alert('Error removing student: ' + err.message);
     }
   };
 
@@ -562,6 +658,20 @@ const AdminDashboard = ({ handleLogout }) => {
     }
   ];
 
+  // Group waitlists by course
+  const waitlistsByCourse = waitlists.reduce((acc, waitlist) => {
+    const courseId = waitlist.courseId;
+    if (!acc[courseId]) {
+      acc[courseId] = {
+        courseCode: waitlist.courseCode,
+        courseName: waitlist.courseName,
+        students: []
+      };
+    }
+    acc[courseId].students.push(waitlist);
+    return acc;
+  }, {});
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -608,7 +718,7 @@ const AdminDashboard = ({ handleLogout }) => {
 
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <button
                   onClick={() => setCurrentTab('courses')}
                   className="bg-blue-50 text-blue-700 p-4 rounded-xl font-semibold hover:bg-blue-100 transition-all border border-blue-200"
@@ -627,6 +737,12 @@ const AdminDashboard = ({ handleLogout }) => {
                 >
                   View Bids
                 </button>
+                <button
+                  onClick={() => setCurrentTab('waitlists')}
+                  className="bg-green-50 text-green-700 p-4 rounded-xl font-semibold hover:bg-green-100 transition-all border border-green-200"
+                >
+                  Manage Waitlists
+                </button>
               </div>
             </div>
           </>
@@ -634,11 +750,11 @@ const AdminDashboard = ({ handleLogout }) => {
 
         {/* Tabs */}
         <div className="bg-white rounded-xl border border-gray-200 p-2 flex gap-2 overflow-x-auto">
-          {['overview', 'courses', 'students', 'bids'].map(tab => (
+          {['overview', 'courses', 'students', 'bids', 'waitlists'].map(tab => (
             <button
               key={tab}
               onClick={() => setCurrentTab(tab)}
-              className={`px-6 py-3 rounded-lg font-semibold transition-all capitalize ${
+              className={`px-6 py-3 rounded-lg font-semibold transition-all capitalize whitespace-nowrap ${
                 currentTab === tab
                   ? 'bg-gray-900 text-white shadow-sm'
                   : 'text-gray-700 hover:bg-gray-100'
@@ -1012,6 +1128,140 @@ const AdminDashboard = ({ handleLogout }) => {
                     <p className="text-gray-600">No rounds created yet. Click "Create New Round" to get started.</p>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Waitlists Tab */}
+        {currentTab === 'waitlists' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">Waitlist Management</h2>
+                  <p className="text-sm text-gray-600 mt-1">Manage course waitlists and promote students</p>
+                </div>
+                <button
+                  onClick={handleProcessAllWaitlists}
+                  className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-all"
+                >
+                  <Activity className="w-5 h-5" />
+                  Process All Waitlists
+                </button>
+              </div>
+
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                <p className="text-sm text-blue-800">
+                  <span className="font-semibold">ℹ️ How it works:</span> Students are automatically added to waitlists when they lose bids. 
+                  Waitlist positions are based on bid amount (higher bids get priority), then timestamp (earlier bids get priority).
+                  When a student drops a course, the next student on the waitlist is automatically enrolled.
+                </p>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading waitlists...</p>
+              </div>
+            ) : Object.keys(waitlistsByCourse).length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <List className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-600 mb-2">No Active Waitlists</h3>
+                <p className="text-gray-500">
+                  Waitlists are automatically created when students lose bids during round processing.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {Object.entries(waitlistsByCourse).map(([courseId, data]) => {
+                  const course = courses.find(c => c.courseId === parseInt(courseId));
+                  const availableSeats = course ? course.capacity - (course.enrolled || 0) : 0;
+                  
+                  return (
+                    <div key={courseId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-6 border-b border-gray-200">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="text-sm font-bold text-orange-600 bg-white px-3 py-1 rounded-full border-2 border-orange-200">
+                                {data.courseCode}
+                              </span>
+                              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 border-2 border-yellow-200">
+                                {data.students.length} ON WAITLIST
+                              </span>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-1">{data.courseName}</h3>
+                            <p className="text-sm text-gray-600">
+                              Available Seats: <span className="font-bold text-gray-800">{availableSeats}</span>
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handlePromoteFromWaitlist(parseInt(courseId))}
+                            disabled={availableSeats <= 0}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition-all ${
+                              availableSeats > 0
+                                ? 'bg-green-600 text-white hover:bg-green-700'
+                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            }`}
+                          >
+                            <UserCheck className="w-4 h-4" />
+                            Promote Next
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Position</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Student</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Email</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Added</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {data.students
+                              .sort((a, b) => a.position - b.position)
+                              .map((waitlist, index) => (
+                              <tr key={waitlist.waitlistId} className={`hover:bg-gray-50 ${index === 0 ? 'bg-green-50' : ''}`}>
+                                <td className="px-6 py-4">
+                                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                    index === 0 ? 'bg-green-600 text-white' : 
+                                    index === 1 ? 'bg-blue-100 text-blue-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {waitlist.position}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <p className="font-medium text-gray-800">{waitlist.studentName}</p>
+                                  <p className="text-xs text-gray-500">ID: {waitlist.studentId}</p>
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-600">{waitlist.studentEmail}</td>
+                                <td className="px-6 py-4 text-sm text-gray-500">
+                                  {waitlist.createdAt ? new Date(waitlist.createdAt).toLocaleDateString() : 'N/A'}
+                                </td>
+                                <td className="px-6 py-4">
+                                  <button
+                                    onClick={() => handleRemoveFromWaitlist(waitlist.waitlistId)}
+                                    className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1 rounded-lg hover:bg-red-100 transition-all text-sm font-semibold border border-red-200"
+                                  >
+                                    <X className="w-3 h-3" />
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
