@@ -61,28 +61,34 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
-    public List<CourseDetailsDto> getEnrolledCourses(String token) {
-        try {
-            // Extract student ID from token
-            Long studentId = jwtUtil.extractStudentId(token);
-            log.info("Fetching enrolled courses for student ID: {}", studentId);
-            
-            // Get all enrollments for this student
-            List<Enrollment> enrollments = enrollmentRepository.findByStudentId(studentId);
-            
-            // Convert to course details
-            return enrollments.stream()
-                    .map(enrollment -> {
-                        Course course = courseRepository.findById(enrollment.getCourseId());
-                        return course != null ? convertToDetailsDto(course) : null;
-                    })
-                    .filter(dto -> dto != null)
-                    .collect(Collectors.toList());
-        } catch (Exception e) {
-            log.error("Error fetching enrolled courses: ", e);
-            throw new RuntimeException("Failed to fetch enrolled courses: " + e.getMessage());
-        }
+public List<CourseDetailsDto> getEnrolledCourses(String token) {
+    try {
+        // Extract student ID from token
+        Long studentId = jwtUtil.extractStudentId(token);
+        log.info("Fetching enrolled courses for student ID: {}", studentId);
+        
+        // Get all enrollments for this student
+        List<Enrollment> enrollments = enrollmentRepository.findByStudentId(studentId);
+        
+        // Convert to course details with enrollmentId
+        return enrollments.stream()
+                .map(enrollment -> {
+                    Course course = courseRepository.findById(enrollment.getCourseId());
+                    if (course != null) {
+                        CourseDetailsDto dto = convertToDetailsDto(course);
+                        // Add enrollmentId to the DTO
+                        dto.setEnrollmentId(Math.toIntExact(enrollment.getEnrollmentId()));
+                        return dto;
+                    }
+                    return null;
+                })
+                .filter(dto -> dto != null)
+                .collect(Collectors.toList());
+    } catch (Exception e) {
+        log.error("Error fetching enrolled courses: ", e);
+        throw new RuntimeException("Failed to fetch enrolled courses: " + e.getMessage());
     }
+}
 
     private CourseDetailsDto convertToDetailsDto(Course course) {
         Department dept = departmentRepository.findById(course.getDeptId());

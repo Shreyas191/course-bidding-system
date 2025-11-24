@@ -1,10 +1,7 @@
 package com.project.cbs.controller;
 
 import com.project.cbs.dto.WaitlistDto;
-import com.project.cbs.model.Course;
-import com.project.cbs.model.Waitlist;
-import com.project.cbs.repository.CourseRepository;
-import com.project.cbs.repository.WaitListRepository;
+import com.project.cbs.service.WaitlistService;
 import com.project.cbs.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/waitlist")
@@ -21,28 +18,29 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "http://localhost:5173")
 public class WaitListController {
 
-    private final WaitListRepository waitlistRepository;
-    private final CourseRepository courseRepository;
+    private final WaitlistService waitlistService;
     private final JwtUtil jwtUtil;
 
+    /**
+     * Get student's own waitlist entries
+     */
     @GetMapping("/my-waitlist")
     public ResponseEntity<?> getMyWaitlist(@RequestHeader("Authorization") String authHeader) {
         try {
             String token = authHeader.substring(7);
             Long studentId = jwtUtil.extractStudentId(token);
             
-            List<Waitlist> waitlist = waitlistRepository.findByStudentId(studentId);
-            List<WaitlistDto> waitlistDtos = waitlist.stream()
-                    .map(this::convertToDto)
-                    .collect(Collectors.toList());
-            
-            return ResponseEntity.ok(waitlistDtos);
+            List<WaitlistDto> waitlist = waitlistService.getMyWaitlist(studentId);
+            return ResponseEntity.ok(waitlist);
         } catch (Exception e) {
             log.error("Error fetching waitlist: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
+    /**
+     * Remove student from waitlist (student can remove themselves)
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<?> removeFromWaitlist(
             @PathVariable Long id,
@@ -52,27 +50,38 @@ public class WaitListController {
             String token = authHeader.substring(7);
             Long studentId = jwtUtil.extractStudentId(token);
             
-            waitlistRepository.deleteById(id);
+            waitlistService.removeFromWaitlist(id, studentId);
             log.info("Student {} removed from waitlist {}", studentId, id);
             
-            return ResponseEntity.ok().body("Removed from waitlist");
+            return ResponseEntity.ok().body("Removed from waitlist successfully");
         } catch (Exception e) {
             log.error("Error removing from waitlist: ", e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    private WaitlistDto convertToDto(Waitlist waitlist) {
-        Course course = courseRepository.findById(waitlist.getCourseId());
-        
-        WaitlistDto dto = new WaitlistDto();
-        dto.setWaitlistId(waitlist.getWaitlistId());
-        dto.setCourseId(waitlist.getCourseId());
-        dto.setCourseCode(course != null ? course.getCourseCode() : "N/A");
-        dto.setCourseName(course != null ? course.getCourseName() : "N/A");
-        dto.setPosition(waitlist.getPosition());
-        dto.setCreatedAt(waitlist.getCreatedAt() != null ? waitlist.getCreatedAt().toString() : null);
-        
-        return dto;
+    /**
+     * Check if student is on waitlist for a course
+     */
+    @GetMapping("/check/{courseId}")
+    public ResponseEntity<?> checkWaitlistStatus(
+            @PathVariable Long courseId,
+            @RequestHeader("Authorization") String authHeader
+    ) {
+        try {
+            String token = authHeader.substring(7);
+            Long studentId = jwtUtil.extractStudentId(token);
+            
+            boolean isOnWaitlist = waitlistService.isOnWaitlist(studentId, courseId);
+            Integer position = waitlistService.getWaitlistPosition(studentId, courseId);
+            
+            return ResponseEntity.ok(Map.of(
+                "isOnWaitlist", isOnWaitlist,
+                "position", position != null ? position : 0
+            ));
+        } catch (Exception e) {
+            log.error("Error checking waitlist status: ", e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }

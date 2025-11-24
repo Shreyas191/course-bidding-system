@@ -22,5 +22,6 @@ public class CourseDetailsDto {
     private Integer minBid;
     private String description;
     private String prerequisites;
+    private Integer enrollmentId;
     private List<ScheduleDto> schedule;
 }

@@ -14,7 +14,7 @@ import Waitlist from './components/Waitlist/Waitlist';
 import Profile from './components/Profile/Profile';
 
 // Helper function to transform API response to app format
-const transformCourseData = (apiCourses) => {
+const transformCourseData = (apiCourses, preserveEnrollmentId = false) => {
   return apiCourses.map(course => {
     // Format schedule from array of ScheduleDto objects
     const scheduleStr = course.schedule && course.schedule.length > 0
@@ -26,7 +26,7 @@ const transformCourseData = (apiCourses) => {
       ? course.schedule[0].location
       : 'TBD';
     
-    return {
+    const transformed = {
       id: course.courseId,
       code: course.courseCode,
       name: course.courseName,
@@ -45,6 +45,13 @@ const transformCourseData = (apiCourses) => {
       description: course.description,
       prerequisites: course.prerequisites
     };
+
+    // Preserve enrollmentId if present (for enrolled courses)
+    if (course.enrollmentId) {
+      transformed.enrollmentId = course.enrollmentId;
+    }
+
+    return transformed;
   });
 };
 
@@ -164,13 +171,28 @@ const App = () => {
   };
 
   const handleBidCancelled = async () => {
-  console.log('Bid cancelled - refreshing data...');
-  // Refresh bids
-  await fetchMyBids();
-  // Refresh wallet balance
-  await fetchUserWallet();
-  console.log('Data refreshed after bid cancellation');
-};
+    console.log('Bid cancelled - refreshing data...');
+    // Refresh bids
+    await fetchMyBids();
+    // Refresh wallet balance
+    await fetchUserWallet();
+    console.log('Data refreshed after bid cancellation');
+  };
+
+  // NEW: Handle course dropped - refreshes all relevant data
+  const handleCourseDropped = async () => {
+    console.log('Course dropped - refreshing all data...');
+    try {
+      // Refresh all relevant data after dropping a course
+      await fetchMyEnrollments();  // Update registered courses
+      await fetchUserWallet();      // Update wallet balance
+      await fetchMyBids();          // Update bids (in case any changed)
+      await fetchMyWaitlist();      // Update waitlist (in case promoted)
+      console.log('All data refreshed after course drop');
+    } catch (err) {
+      console.error('Error refreshing data after course drop:', err);
+    }
+  };
 
   // Fetch user wallet balance
   const fetchUserWallet = async () => {
@@ -245,11 +267,20 @@ const App = () => {
       
       if (response.ok) {
         const data = await response.json();
-        const transformedEnrollments = transformCourseData(data).map(course => ({
-          ...course,
-          grade: 'A',
-          status: 'ongoing'
-        }));
+        console.log('Raw enrollment data from API:', data); // DEBUG
+        
+        // Transform and ADD grade/status without losing enrollmentId
+        const transformedEnrollments = transformCourseData(data, true).map(course => {
+          console.log('Transformed course:', course); // DEBUG
+          return {
+            ...course,
+            grade: 'A',
+            status: 'ongoing',
+            // enrollmentId is already in course from transformCourseData
+          };
+        });
+        
+        console.log('Final transformed enrollments:', transformedEnrollments); // DEBUG
         setRegisteredCourses(transformedEnrollments);
       }
     } catch (err) {
@@ -361,8 +392,6 @@ const App = () => {
       setLoading(false);
     }
   };
-
-
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
@@ -676,7 +705,10 @@ const App = () => {
           )}
 
           {currentPage === 'registered' && (
-            <RegisteredCourses registeredCourses={registeredCourses} />
+            <RegisteredCourses 
+              registeredCourses={registeredCourses} 
+              onCourseDropped={handleCourseDropped}
+            />
           )}
 
           {currentPage === 'waitlist' && (
