@@ -15,8 +15,6 @@ import com.project.cbs.dto.RoundDto;
 import com.project.cbs.dto.StudentDetailsDto;
 import com.project.cbs.dto.RoundWithBidsDto;
 import com.project.cbs.dto.BidDetailsDto;
-import com.project.cbs.dto.RoundWithBidsDto;
-import com.project.cbs.dto.BidDetailsDto;
 import com.project.cbs.model.Course;
 import com.project.cbs.model.CourseSchedule;
 import com.project.cbs.model.Round;
@@ -24,14 +22,11 @@ import com.project.cbs.model.Student;
 import com.project.cbs.model.Department;
 import com.project.cbs.model.Wallet;
 import com.project.cbs.model.Bid;
-import com.project.cbs.model.Bid;
 import com.project.cbs.repository.CourseRepository;
 import com.project.cbs.repository.CourseScheduleRepository;
 import com.project.cbs.repository.StudentRepository;
 import com.project.cbs.repository.DepartmentRepository;
 import com.project.cbs.repository.WalletRepository;
-import com.project.cbs.repository.RoundRepository;
-import com.project.cbs.repository.BidRepository;
 import com.project.cbs.repository.RoundRepository;
 import com.project.cbs.repository.BidRepository;
 import com.project.cbs.service.BidService;
@@ -114,9 +109,10 @@ public class AdminController {
             courseScheduleRepository.save(schedule);
             log.info("Schedule saved for course ID: {}", courseId);
             
+            // BROADCAST: Course addition is an announcement
             notificationService.broadcastSystemNotification(
-                "New Course Added",
-                "Course " + course.getCourseName() + " has been added."
+                "New Course Available",
+                "Course " + course.getCourseName() + " (" + course.getCourseCode() + ") has been added to the catalog."
             );
             return ResponseEntity.ok("Course added successfully");
         } catch (Exception e) {
@@ -158,6 +154,8 @@ public class AdminController {
             courseScheduleRepository.save(schedule);
             log.info("Course and schedule updated for ID: {}", id);
             
+            // NO BROADCAST: Course updates are administrative, not announcements
+            
             return ResponseEntity.ok("Course updated successfully");
         } catch (Exception e) {
             log.error("Error updating course: ", e);
@@ -169,6 +167,10 @@ public class AdminController {
     public ResponseEntity<?> deleteCourse(@PathVariable Long id) {
         try {
             courseRepository.delete(id);
+            
+            // NO BROADCAST: Course deletion is administrative
+            log.info("Course deleted with ID: {}", id);
+            
             return ResponseEntity.ok("Course deleted successfully");
         } catch (Exception e) {
             log.error("Error deleting course: ", e);
@@ -230,11 +232,7 @@ public class AdminController {
             int result = studentRepository.save(student);
             log.info("Student saved with result: {}", result);
             
-            // Send notification about new student
-            notificationService.broadcastSystemNotification(
-                "New Student Added",
-                "A new student " + student.getName() + " has been added to the system."
-            );
+            // NO BROADCAST: Student management is administrative, not an announcement
             
             return ResponseEntity.ok("Student added successfully");
         } catch (Exception e) {
@@ -247,10 +245,10 @@ public class AdminController {
     public ResponseEntity<?> deleteStudent(@PathVariable Long id) {
         try {
             studentRepository.deleteById(id);
-            notificationService.broadcastSystemNotification(
-                "Student Deleted",
-                "A student has been removed from the system."
-            );
+            
+            // NO BROADCAST: Student management is administrative
+            log.info("Student deleted with ID: {}", id);
+            
             return ResponseEntity.ok("Student deleted successfully");
         } catch (Exception e) {
             log.error("Error deleting student: ", e);
@@ -275,10 +273,10 @@ public class AdminController {
             existing.setDeptId(student.getDeptId());
             
             studentRepository.update(existing);
-            notificationService.broadcastSystemNotification(
-                "Student Updated",
-                "Student information has been updated."
-            );
+            
+            // NO BROADCAST: Student management is administrative
+            log.info("Student updated with ID: {}", id);
+            
             return ResponseEntity.ok("Student updated successfully");
         } catch (Exception e) {
             log.error("Error updating student: ", e);
@@ -364,9 +362,10 @@ public class AdminController {
             Integer roundId = roundRepository.save(round);
             round.setRoundId(roundId);
             
+            // BROADCAST: Round creation is an announcement
             notificationService.broadcastSystemNotification(
-                "New Round Created: " + round.getRoundName(),
-                "A new bidding round has been created. Get ready to place your bids!"
+                "New Bidding Round Created",
+                round.getRoundName() + " has been scheduled. Get ready to place your bids!"
             );
             
             return ResponseEntity.ok(round);
@@ -392,6 +391,9 @@ public class AdminController {
             
             roundRepository.update(existing);
             
+            // NO BROADCAST: Round updates are administrative unless it's a status change
+            log.info("Round updated with ID: {}", id);
+            
             return ResponseEntity.ok(existing);
         } catch (Exception e) {
             log.error("Error updating round: ", e);
@@ -404,6 +406,9 @@ public class AdminController {
         try {
             log.info("Admin deleting round: {}", id);
             roundRepository.delete(id);
+            
+            // NO BROADCAST: Round deletion is administrative
+            
             return ResponseEntity.ok("Round deleted successfully");
         } catch (Exception e) {
             log.error("Error deleting round: ", e);
@@ -422,9 +427,10 @@ public class AdminController {
             
             roundRepository.updateStatus(id, "active");
             
+            // BROADCAST: Round activation is an important announcement
             notificationService.broadcastSystemNotification(
-                "Round Started: " + round.getRoundName(),
-                "Bidding round has been activated. Start placing your bids now!"
+                "🔔 Round Started: " + round.getRoundName(),
+                "Bidding is now OPEN! Start placing your bids before the deadline."
             );
             
             return ResponseEntity.ok("Round activated successfully");
@@ -439,6 +445,10 @@ public class AdminController {
         try {
             log.info("Admin processing round: {}", id);
             roundService.processRound(id);
+            
+            // NOTE: The roundService.processRound() method already broadcasts a notification
+            // when processing is complete, so we don't need to do it here
+            
             return ResponseEntity.ok("Round processed successfully");
         } catch (Exception e) {
             log.error("Error processing round: ", e);

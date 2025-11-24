@@ -10,7 +10,6 @@ const BrowseCourses = ({
   categories, 
   filteredCourses, 
   myBids, 
-  handleAddToWaitlist,
   handleAddToCart,
   currentRound,
   coursesWon
@@ -61,7 +60,6 @@ const BrowseCourses = ({
               course={course}
               myBid={myBid}
               wonInRound1={wonInRound1}
-              handleAddToWaitlist={handleAddToWaitlist}
               handleAddToCart={handleAddToCart}
               currentRound={currentRound}
             />

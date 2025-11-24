@@ -1,14 +1,128 @@
-import React from 'react';
-import { DollarSign, CheckCircle, XCircle, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { DollarSign, CheckCircle, XCircle, Clock, Trash2, Edit2, Save, X as CloseIcon } from 'lucide-react';
 
-const MyBids = ({ myBids = [], courses = [], currentRound = 1, coursesWon = [], coursesLost = [] }) => {
+const MyBids = ({ myBids = [], courses = [], currentRound = 1, coursesWon = [], coursesLost = [], onBidCancelled, points }) => {
+  const [editingBid, setEditingBid] = useState(null);
+  const [newBidAmount, setNewBidAmount] = useState('');
+  
   const getCourseById = (id) => courses.find(c => c.id === id);
 
   const round1Bids = myBids.filter(b => b.roundId === 1);
   const round2Bids = myBids.filter(b => b.roundId === 2);
 
+  const handleCancelBid = async (bidId) => {
+    if (!window.confirm('Are you sure you want to cancel this bid? Your points will be refunded.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`http://localhost:8080/api/bids/${bidId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        alert('Bid cancelled successfully! Your points have been refunded.');
+        // Callback to parent to refresh data
+        if (onBidCancelled) {
+          onBidCancelled();
+        }
+      } else {
+        const error = await response.text();
+        alert('Failed to cancel bid: ' + error);
+      }
+    } catch (err) {
+      console.error('Error cancelling bid:', err);
+      alert('Error cancelling bid. Please try again.');
+    }
+  };
+
+  const handleEditBid = (bid, course) => {
+    setEditingBid(bid.bidId);
+    setNewBidAmount(bid.bidAmount.toString());
+  };
+
+  const handleCancelEdit = () => {
+    setEditingBid(null);
+    setNewBidAmount('');
+  };
+
+  const handleUpdateBid = async (bid) => {
+    const amount = parseInt(newBidAmount);
+    const course = getCourseById(bid.courseId);
+    
+    if (!amount || amount < (course?.minBid || 0)) {
+      alert(`Bid amount must be at least ${course?.minBid || 0} points`);
+      return;
+    }
+
+    if (amount === bid.bidAmount) {
+      alert('No changes made to bid amount');
+      handleCancelEdit();
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('authToken');
+      
+      // Get current round info
+      const roundResponse = await fetch('http://localhost:8080/api/rounds/current', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!roundResponse.ok) {
+        throw new Error('No active round found');
+      }
+      
+      const currentRoundData = await roundResponse.json();
+      
+      // Place new bid (backend will update existing one)
+      const response = await fetch('http://localhost:8080/api/bids', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          courseId: bid.courseId,
+          bidAmount: amount
+        })
+      });
+
+      if (response.ok) {
+        const difference = amount - bid.bidAmount;
+        if (difference > 0) {
+          alert(`Bid updated successfully! ${difference} additional points deducted.`);
+        } else {
+          alert(`Bid updated successfully! ${Math.abs(difference)} points refunded.`);
+        }
+        
+        handleCancelEdit();
+        
+        // Callback to parent to refresh data
+        if (onBidCancelled) {
+          onBidCancelled();
+        }
+      } else {
+        const error = await response.text();
+        alert('Failed to update bid: ' + error);
+      }
+    } catch (err) {
+      console.error('Error updating bid:', err);
+      alert('Error updating bid: ' + err.message);
+    }
+  };
+
   const renderBidCard = (bid) => {
     const course = getCourseById(bid.courseId);
+    const isEditing = editingBid === bid.bidId;
     
     // If course not found in courses list, use data from bid itself
     if (!course) {
@@ -21,10 +135,10 @@ const MyBids = ({ myBids = [], courses = [], currentRound = 1, coursesWon = [], 
                   {bid.courseCode}
                 </span>
                 <span className="text-xs text-gray-500">{bid.roundName}</span>
-                {bid.status === 'active' && (
+                {bid.status === 'pending' && (
                   <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
                     <Clock className="w-3 h-3" />
-                    Active
+                    Pending
                   </span>
                 )}
               </div>
@@ -35,8 +149,56 @@ const MyBids = ({ myBids = [], courses = [], currentRound = 1, coursesWon = [], 
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-600 mb-1">Your Bid</p>
-              <p className="text-3xl font-bold text-cyan-600">{bid.bidAmount}</p>
-              <p className="text-xs text-gray-500 mt-1">points</p>
+              {isEditing ? (
+                <div className="space-y-2">
+                  <input
+                    type="number"
+                    value={newBidAmount}
+                    onChange={(e) => setNewBidAmount(e.target.value)}
+                    className="w-24 px-3 py-2 text-center rounded-lg border-2 border-cyan-500 font-bold text-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                    min={bid.minBid || 0}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleUpdateBid(bid)}
+                      className="flex items-center gap-1 bg-green-500 text-white px-3 py-1.5 rounded-lg hover:bg-green-600 transition-all text-xs font-semibold"
+                    >
+                      <Save className="w-3 h-3" />
+                      Save
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      className="flex items-center gap-1 bg-gray-300 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-400 transition-all text-xs font-semibold"
+                    >
+                      <CloseIcon className="w-3 h-3" />
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-3xl font-bold text-cyan-600">{bid.bidAmount}</p>
+                  <p className="text-xs text-gray-500 mt-1">points</p>
+                  {bid.status === 'pending' && (
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => handleEditBid(bid, course)}
+                        className="flex items-center gap-1 bg-blue-50 text-blue-600 px-3 py-2 rounded-lg hover:bg-blue-100 transition-all text-sm font-semibold"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleCancelBid(bid.bidId)}
+                        className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100 transition-all text-sm font-semibold"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -74,10 +236,10 @@ const MyBids = ({ myBids = [], courses = [], currentRound = 1, coursesWon = [], 
                   Leading
                 </span>
               )}
-              {finalStatus === 'active' && (
+              {finalStatus === 'pending' && (
                 <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
                   <Clock className="w-3 h-3" />
-                  Active
+                  Pending
                 </span>
               )}
               {finalStatus === 'outbid' && (
@@ -92,18 +254,83 @@ const MyBids = ({ myBids = [], courses = [], currentRound = 1, coursesWon = [], 
             <div className="flex items-center gap-4 text-sm text-gray-500">
               <span>{bid.createdAt}</span>
               <span>•</span>
+              <span>Min: {course.minBid} pts</span>
+              <span>•</span>
               <span>Avg: {course.avgBid} pts</span>
             </div>
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-600 mb-1">Your Bid</p>
-            <p className="text-3xl font-bold text-cyan-600">{bid.bidAmount}</p>
-            <p className="text-xs text-gray-500 mt-1">points</p>
+            {isEditing ? (
+              <div className="space-y-2">
+                <input
+                  type="number"
+                  value={newBidAmount}
+                  onChange={(e) => setNewBidAmount(e.target.value)}
+                  className="w-24 px-3 py-2 text-center rounded-lg border-2 border-cyan-500 font-bold text-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                  min={course.minBid || 0}
+                />
+                <p className="text-xs text-gray-500">Min: {course.minBid}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleUpdateBid(bid)}
+                    className="flex items-center justify-center gap-1 bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition-all text-sm font-semibold"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="flex items-center justify-center gap-1 bg-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-400 transition-all text-sm font-semibold"
+                  >
+                    <CloseIcon className="w-4 h-4" />
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-3xl font-bold text-cyan-600">{bid.bidAmount}</p>
+                <p className="text-xs text-gray-500 mt-1">points</p>
+                {finalStatus === 'pending' && (
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => handleEditBid(bid, course)}
+                      className="flex items-center justify-center gap-1 bg-blue-50 text-blue-600 px-3 py-2 rounded-lg hover:bg-blue-100 transition-all text-sm font-semibold"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleCancelBid(bid.bidId)}
+                      className="flex items-center justify-center gap-1 bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100 transition-all text-sm font-semibold"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
+        {isEditing && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+            <p className="text-xs text-blue-700">
+              <strong>💡 Tip:</strong> Your wallet will be adjusted automatically. 
+              {parseInt(newBidAmount) > bid.bidAmount 
+                ? ` Additional ${parseInt(newBidAmount) - bid.bidAmount} points will be deducted.`
+                : ` ${bid.bidAmount - parseInt(newBidAmount)} points will be refunded.`
+              }
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              Available balance: {points} points
+            </p>
+          </div>
+        )}
       </div>
     );
-  };
+  }
 
   return (
     <div className="space-y-6">

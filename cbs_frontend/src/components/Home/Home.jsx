@@ -37,13 +37,13 @@ const Home = ({
               </h1>
               <p className="text-gray-500">Here's your course bidding overview</p>
             </div>
-            <div className="flex items-center gap-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-5 py-3 rounded-xl shadow-md">
-              <Coins className="w-5 h-5" />
-              <div>
-                <p className="text-xs opacity-90">Wallet Balance</p>
-                <p className="text-2xl font-bold">{points}</p>
-              </div>
-            </div>
+            <div className="flex items-center gap-3 bg-cyan-50 text-gray-800 px-5 py-3 rounded-xl shadow-sm border border-cyan-200">
+  <Coins className="w-5 h-5 text-cyan-600" />
+  <div>
+    <p className="text-xs text-cyan-700">Wallet Balance</p>
+    <p className="text-2xl font-bold text-gray-900">{points}</p>
+  </div>
+</div>
           </div>
           
           <div className="mt-6 grid grid-cols-3 gap-4">
@@ -230,12 +230,12 @@ const Home = ({
         roundEndTime={roundEndTime}
       />
 
-      {/* Round Timeline */}
+      {/* Round Timeline
       <RoundTimeline
         currentRound={currentRound}
         round1EndDate={round1EndDate}
         round2EndDate={round2EndDate}
-      />
+      /> */}
 
       {/* Cart Summary */}
       {cart.length > 0 && (

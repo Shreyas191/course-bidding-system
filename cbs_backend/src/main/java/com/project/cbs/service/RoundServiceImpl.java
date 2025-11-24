@@ -5,6 +5,7 @@ import com.project.cbs.model.*;
 import com.project.cbs.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,7 @@ public class RoundServiceImpl implements RoundService {
     private final WalletRepository walletRepository;
     private final NotificationService notificationService;
     private final WaitListRepository waitlistRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public List<RoundDto> getAllRounds() {
@@ -71,41 +73,46 @@ public class RoundServiceImpl implements RoundService {
     @Override
     @Transactional
     public void processRound(Integer roundId) {
-        log.info("===== STARTING BID PROCESSING FOR ROUND {} =====", roundId);
+        log.info("===== STARTING BID PROCESSING FOR ROUND {} USING STORED PROCEDURE =====", roundId);
         
         Round round = roundRepository.findById(roundId);
         if (round == null) {
             throw new RuntimeException("Round not found");
         }
         
-        if (!"active".equals(round.getStatus())) {
-            throw new RuntimeException("Can only process active rounds");
+        if (!"closed".equals(round.getStatus())) {
+            throw new RuntimeException("Can only process completed rounds");
         }
         
-        // Mark round as processing
-        roundRepository.updateStatus(roundId, "processing");
-        
         try {
-            // Get all pending bids for this round
-            List<Bid> allBids = bidRepository.findPendingBidsByRoundId(roundId);
-            log.info("Found {} pending bids to process", allBids.size());
+            // Call the stored procedure to process all bids for ALL courses in the round
+            // This procedure handles FCFS tie-breaking automatically
+            log.info("Calling stored procedure: process_round_bids({})", roundId);
+            jdbcTemplate.update("CALL process_round_bids(?)", roundId);
+            log.info("Stored procedure execution completed successfully");
             
-            // Group bids by course
-            Map<Long, List<Bid>> bidsByCourse = allBids.stream()
-                    .collect(Collectors.groupingBy(Bid::getCourseId));
+            // Refresh round data from database (status should now be 'closed')
+            round = roundRepository.findById(roundId);
             
-            log.info("Processing bids for {} courses", bidsByCourse.size());
+            // Get all processed bids for notification
+            List<Bid> allBids = bidRepository.findByRoundId(roundId);
             
-            // Process each course
-            for (Map.Entry<Long, List<Bid>> entry : bidsByCourse.entrySet()) {
-                Long courseId = entry.getKey();
-                List<Bid> courseBids = entry.getValue();
-                
-                processCourseBids(courseId, courseBids, roundId);
+            // Send notifications to all students about their bid results
+            log.info("Sending notifications for {} bids", allBids.size());
+            for (Bid bid : allBids) {
+                Course course = courseRepository.findById(bid.getCourseId());
+                if (course != null && ("won".equals(bid.getStatus()) || "lost".equals(bid.getStatus()))) {
+                    boolean won = "won".equals(bid.getStatus());
+                    notificationService.sendBidResultNotification(
+                        bid.getStudentId(),
+                        bid.getBidId(),
+                        bid.getCourseId(),
+                        course.getCourseName(),
+                        won,
+                        bid.getBidAmount()
+                    );
+                }
             }
-            
-            // Mark round as processed
-            roundRepository.markAsProcessed(roundId);
             
             log.info("===== BID PROCESSING COMPLETED FOR ROUND {} =====", roundId);
             
@@ -116,119 +123,10 @@ public class RoundServiceImpl implements RoundService {
             );
             
         } catch (Exception e) {
-            log.error("Error processing round: ", e);
-            roundRepository.updateStatus(roundId, "active"); // Rollback to active
+            log.error("Error processing round using stored procedure: ", e);
+            // Rollback will happen automatically due to @Transactional
             throw new RuntimeException("Failed to process round: " + e.getMessage());
         }
-    }
-
-    private void processCourseBids(Long courseId, List<Bid> courseBids, Integer roundId) {
-        Course course = courseRepository.findById(courseId);
-        if (course == null) {
-            log.error("Course {} not found, skipping", courseId);
-            return;
-        }
-        
-        log.info("Processing {} bids for course: {} ({})", courseBids.size(), course.getCourseCode(), course.getCourseName());
-        
-        // Get CURRENT enrolled count from database (fresh data)
-        Course freshCourse = courseRepository.findById(courseId);
-        int currentEnrolled = freshCourse.getEnrolled();
-        int capacity = freshCourse.getCapacity();
-        int availableSeats = capacity - currentEnrolled;
-        
-        log.info("Current enrolled: {}, Capacity: {}, Available seats: {}", currentEnrolled, capacity, availableSeats);
-        
-        if (availableSeats <= 0) {
-            log.info("No available seats, marking all bids as lost and adding to waitlist");
-            for (Bid bid : courseBids) {
-                bidRepository.updateStatus(bid.getBidId(), "lost");
-                walletRepository.addPoints(bid.getStudentId(), bid.getBidAmount());
-                waitlistRepository.addToWaitlist(bid.getStudentId(), bid.getCourseId(), bid.getBidAmount());
-                notificationService.sendBidResultNotification(
-                    bid.getStudentId(), bid.getBidId(), courseId, 
-                    course.getCourseName(), false, bid.getBidAmount()
-                );
-            }
-            return;
-        }
-        
-        // Sort bids: highest amount first, then earliest created (FIFO for ties)
-        List<Bid> sortedBids = courseBids.stream()
-                .sorted(Comparator
-                        .comparing(Bid::getBidAmount).reversed()
-                        .thenComparing(Bid::getCreatedAt))
-                .collect(Collectors.toList());
-        
-        // Process winners and losers
-        for (int i = 0; i < sortedBids.size(); i++) {
-            Bid bid = sortedBids.get(i);
-            
-            if (i < availableSeats) {
-                // WINNER
-                processWinningBid(bid, course, roundId);
-            } else {
-                // LOSER
-                processLosingBid(bid, course);
-            }
-        }
-    }
-
-    private void processWinningBid(Bid bid, Course course, Integer roundId) {
-        log.info("BID WON - Student: {}, Course: {}, Amount: {}", 
-                 bid.getStudentId(), course.getCourseCode(), bid.getBidAmount());
-        
-        try {
-            // Update bid status
-            bidRepository.updateStatus(bid.getBidId(), "won");
-            
-            // Create enrollment
-            Enrollment enrollment = new Enrollment();
-            enrollment.setStudentId(bid.getStudentId());
-            enrollment.setCourseId(bid.getCourseId());
-            enrollment.setRoundId(roundId);
-            enrollment.setBidId(bid.getBidId());
-            enrollmentRepository.save(enrollment);
-            
-            log.info("Enrollment created successfully for student {} in course {}", 
-                     bid.getStudentId(), course.getCourseCode());
-            
-            // Send success notification
-            notificationService.sendBidResultNotification(
-                bid.getStudentId(), bid.getBidId(), bid.getCourseId(),
-                course.getCourseName(), true, bid.getBidAmount()
-            );
-            
-        } catch (Exception e) {
-            log.error("Error processing winning bid {}: ", bid.getBidId(), e);
-            throw new RuntimeException("Failed to process winning bid: " + e.getMessage());
-        }
-    }
-
-    private void processLosingBid(Bid bid, Course course) {
-        log.info("BID LOST - Student: {}, Course: {}, Amount: {} (REFUNDING & ADDING TO WAITLIST)", 
-                 bid.getStudentId(), course.getCourseCode(), bid.getBidAmount());
-        
-        // Refund the bid amount to student's wallet
-        walletRepository.addPoints(bid.getStudentId(), bid.getBidAmount());
-        log.info("Refunded {} points to student {}", bid.getBidAmount(), bid.getStudentId());
-        
-        // Add student to waitlist for this course
-        try {
-            waitlistRepository.addToWaitlist(bid.getStudentId(), bid.getCourseId(), bid.getBidAmount());
-            log.info("Added student {} to waitlist for course {}", bid.getStudentId(), bid.getCourseId());
-        } catch (Exception e) {
-            log.error("Failed to add to waitlist: ", e);
-        }
-        
-        // Update bid status
-        bidRepository.updateStatus(bid.getBidId(), "lost");
-        
-        // Send failure notification with refund info
-        notificationService.sendBidResultNotification(
-            bid.getStudentId(), bid.getBidId(), bid.getCourseId(),
-            course.getCourseName(), false, bid.getBidAmount()
-        );
     }
 
     @Override

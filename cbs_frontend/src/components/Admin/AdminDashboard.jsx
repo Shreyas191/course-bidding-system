@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, BookOpen, TrendingUp, DollarSign, Plus, Edit2, Trash2, 
   Search, X, Save, CheckCircle, AlertCircle, LogOut, Home as HomeIcon,
-  Calendar, Clock, MapPin, Eye
+  Calendar, Clock, MapPin, Eye, Activity
 } from 'lucide-react';
 
 const AdminDashboard = ({ handleLogout }) => {
@@ -66,13 +66,12 @@ const AdminDashboard = ({ handleLogout }) => {
   // Helper function to format time (remove seconds)
   const formatTime = (time) => {
     if (!time) return '';
-    return time.substring(0, 5); // Convert "HH:mm:ss" to "HH:mm"
+    return time.substring(0, 5);
   };
 
   // Fetch departments on mount
   useEffect(() => {
     fetchDepartments();
-    // Fetch all data for overview stats
     fetchCourses();
     fetchStudents();
     fetchBids();
@@ -94,28 +93,35 @@ const AdminDashboard = ({ handleLogout }) => {
   }, [currentTab]);
 
   // Helper function to get round status based on real-time
-  const getRoundStatus = (round) => {
-    const now = currentTime;
-    const startTime = round.startTime ? new Date(round.startTime) : null;
-    const endTime = round.endTime ? new Date(round.endTime) : null;
+ const getRoundStatus = (round) => {
+  const now = currentTime;
+  const startTime = round.startTime ? new Date(round.startTime) : null;
+  const endTime = round.endTime ? new Date(round.endTime) : null;
 
-    if (!startTime || !endTime) {
-      return { status: 'pending', label: 'Not Started', color: 'bg-gray-500' };
-    }
+  if (!startTime || !endTime) {
+    return { status: 'pending', label: 'Not Started', color: 'bg-gray-100 text-gray-700' };
+  }
 
-    // If already processed, show as closed
-    if (round.status === 'closed' || round.processedAt) {
-      return { status: 'closed', label: 'Closed', color: 'bg-gray-500' };
-    }
-
-    if (now < startTime) {
-      return { status: 'pending', label: 'Not Started', color: 'bg-yellow-500' };
-    } else if (now >= startTime && now < endTime) {
-      return { status: 'active', label: 'Active', color: 'bg-green-500' };
-    } else {
-      return { status: 'completed', label: 'Completed', color: 'bg-blue-500' };
-    }
-  };
+  // ✅ CHECK TIME FIRST - This is the fix!
+  
+  // Before start time
+  if (now < startTime) {
+    return { status: 'pending', label: 'Not Started', color: 'bg-yellow-100 text-yellow-700' };
+  }
+  
+  // Currently active (within time window)
+  if (now >= startTime && now < endTime) {
+    return { status: 'active', label: 'Active', color: 'bg-green-100 text-green-700' };
+  }
+  
+  // After end time - NOW check if processed
+  if (round.status === 'closed' || round.processedAt) {
+    return { status: 'closed', label: 'Closed', color: 'bg-gray-100 text-gray-700' };
+  }
+  
+  // After end time but not processed yet
+  return { status: 'completed', label: 'Completed', color: 'bg-blue-100 text-blue-700' };
+};
 
   // Helper function to calculate countdown
   const getCountdown = (round) => {
@@ -468,26 +474,6 @@ const AdminDashboard = ({ handleLogout }) => {
     }
   };
 
-  const handleActivateRound = async (roundId) => {
-    if (!window.confirm('Are you sure you want to activate this round?')) return;
-    
-    try {
-      const response = await fetch(`http://localhost:8080/api/admin/rounds/${roundId}/activate`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (response.ok) {
-        alert('Round activated successfully!');
-        fetchRounds();
-      } else {
-        throw new Error('Failed to activate round');
-      }
-    } catch (err) {
-      alert('Error activating round: ' + err.message);
-    }
-  };
-
   const openRoundModal = (round = null) => {
     if (round) {
       setEditingRound(round);
@@ -563,31 +549,31 @@ const AdminDashboard = ({ handleLogout }) => {
   };
 
   const stats = [
-    { title: 'Total Courses', value: courses.length, icon: BookOpen, color: 'from-cyan-600 to-teal-600' },
-    { title: 'Total Students', value: students.length, icon: Users, color: 'from-purple-600 to-pink-600' },
-    { title: 'Active Bids', value: bids.length, icon: TrendingUp, color: 'from-amber-500 to-orange-500' },
+    { title: 'Total Courses', value: courses.length, icon: BookOpen, color: 'text-blue-600 bg-blue-50' },
+    { title: 'Total Students', value: students.length, icon: Users, color: 'text-purple-600 bg-purple-50' },
+    { title: 'Active Bids', value: bids.length, icon: TrendingUp, color: 'text-amber-600 bg-amber-50' },
     { 
       title: 'Avg Bid Points', 
       value: bids.length > 0 
         ? Math.round(bids.reduce((sum, bid) => sum + (bid.bidAmount || 0), 0) / bids.length)
         : 0, 
       icon: DollarSign, 
-      color: 'from-emerald-500 to-green-500' 
+      color: 'text-green-600 bg-green-50' 
     }
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-lg border-b border-indigo-100">
+      <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center">
+              <div className="w-12 h-12 bg-gray-900 rounded-xl flex items-center justify-center">
                 <HomeIcon className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold text-gray-900">
                   Admin Dashboard
                 </h1>
                 <p className="text-xs text-gray-600">Course Bidding System</p>
@@ -595,7 +581,7 @@ const AdminDashboard = ({ handleLogout }) => {
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 bg-rose-100 text-rose-600 px-4 py-2 rounded-xl font-semibold hover:bg-rose-200 transition-all"
+              className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-xl font-semibold hover:bg-gray-200 transition-all"
             >
               <LogOut className="w-4 h-4" />
               Logout
@@ -610,9 +596,9 @@ const AdminDashboard = ({ handleLogout }) => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {stats.map((stat, index) => (
-                <div key={index} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all">
-                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-r ${stat.color} flex items-center justify-center mb-4`}>
-                    <stat.icon className="w-6 h-6 text-white" />
+                <div key={index} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-all">
+                  <div className={`w-12 h-12 rounded-xl ${stat.color} flex items-center justify-center mb-4`}>
+                    <stat.icon className="w-6 h-6" />
                   </div>
                   <p className="text-gray-600 text-sm mb-1">{stat.title}</p>
                   <p className="text-3xl font-bold text-gray-800">{stat.value}</p>
@@ -620,24 +606,24 @@ const AdminDashboard = ({ handleLogout }) => {
               ))}
             </div>
 
-            <div className="bg-white rounded-3xl shadow-lg p-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Quick Actions</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <button
                   onClick={() => setCurrentTab('courses')}
-                  className="bg-gradient-to-r from-cyan-600 to-teal-600 text-white p-4 rounded-xl font-semibold hover:shadow-xl transition-all"
+                  className="bg-blue-50 text-blue-700 p-4 rounded-xl font-semibold hover:bg-blue-100 transition-all border border-blue-200"
                 >
                   Manage Courses
                 </button>
                 <button
                   onClick={() => setCurrentTab('students')}
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 rounded-xl font-semibold hover:shadow-xl transition-all"
+                  className="bg-purple-50 text-purple-700 p-4 rounded-xl font-semibold hover:bg-purple-100 transition-all border border-purple-200"
                 >
                   Manage Students
                 </button>
                 <button
                   onClick={() => setCurrentTab('bids')}
-                  className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-4 rounded-xl font-semibold hover:shadow-xl transition-all"
+                  className="bg-amber-50 text-amber-700 p-4 rounded-xl font-semibold hover:bg-amber-100 transition-all border border-amber-200"
                 >
                   View Bids
                 </button>
@@ -647,14 +633,14 @@ const AdminDashboard = ({ handleLogout }) => {
         )}
 
         {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-lg p-2 flex gap-2 overflow-x-auto">
+        <div className="bg-white rounded-xl border border-gray-200 p-2 flex gap-2 overflow-x-auto">
           {['overview', 'courses', 'students', 'bids'].map(tab => (
             <button
               key={tab}
               onClick={() => setCurrentTab(tab)}
-              className={`px-6 py-3 rounded-xl font-semibold transition-all capitalize ${
+              className={`px-6 py-3 rounded-lg font-semibold transition-all capitalize ${
                 currentTab === tab
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg'
+                  ? 'bg-gray-900 text-white shadow-sm'
                   : 'text-gray-700 hover:bg-gray-100'
               }`}
             >
@@ -666,7 +652,7 @@ const AdminDashboard = ({ handleLogout }) => {
         {/* Courses Tab */}
         {currentTab === 'courses' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow-lg p-4 flex justify-between items-center">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex justify-between items-center">
               <div className="flex-1 relative">
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
@@ -674,7 +660,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   placeholder="Search courses..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                 />
               </div>
               <button
@@ -686,7 +672,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   });
                   setShowCourseModal(true);
                 }}
-                className="ml-4 flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-xl transition-all"
+                className="ml-4 flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold hover:bg-gray-800 transition-all"
               >
                 <Plus className="w-5 h-5" />
                 Add Course
@@ -694,8 +680,8 @@ const AdminDashboard = ({ handleLogout }) => {
             </div>
 
             {loading ? (
-              <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
                 <p className="text-gray-600">Loading courses...</p>
               </div>
             ) : (
@@ -706,33 +692,33 @@ const AdminDashboard = ({ handleLogout }) => {
                   c.instructorName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                   c.departmentName?.toLowerCase().includes(searchTerm.toLowerCase())
                 ).map(course => (
-                  <div key={course.courseId} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all overflow-hidden">
-                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4">
+                  <div key={course.courseId} className="bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all overflow-hidden">
+                    <div className="bg-gray-50 p-4 border-b border-gray-200">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <span className="text-lg font-bold text-white">
+                            <span className="text-sm font-bold text-gray-700 bg-white border border-gray-300 px-3 py-1 rounded-lg">
                               {course.courseCode}
                             </span>
-                            <span className="text-sm text-indigo-100 bg-white/20 px-3 py-1 rounded-full">
+                            <span className="text-sm text-gray-600 bg-white border border-gray-200 px-3 py-1 rounded-lg">
                               {course.departmentName}
                             </span>
                           </div>
-                          <h3 className="text-2xl font-bold text-white mb-1">{course.courseName}</h3>
-                          <p className="text-indigo-100">Prof. {course.instructorName}</p>
+                          <h3 className="text-xl font-bold text-gray-900 mb-1">{course.courseName}</h3>
+                          <p className="text-gray-600">Prof. {course.instructorName}</p>
                         </div>
                         <div className="flex gap-2">
                           <button
                             onClick={() => openEditCourse(course)}
-                            className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all"
+                            className="p-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg transition-all"
                           >
-                            <Edit2 className="w-5 h-5 text-white" />
+                            <Edit2 className="w-5 h-5 text-gray-700" />
                           </button>
                           <button
                             onClick={() => handleDeleteCourse(course.courseId)}
-                            className="p-2 bg-white/20 hover:bg-rose-500 rounded-lg transition-all"
+                            className="p-2 bg-white border border-red-200 hover:bg-red-50 rounded-lg transition-all"
                           >
-                            <Trash2 className="w-5 h-5 text-white" />
+                            <Trash2 className="w-5 h-5 text-red-600" />
                           </button>
                         </div>
                       </div>
@@ -740,8 +726,8 @@ const AdminDashboard = ({ handleLogout }) => {
                     
                     <div className="p-6">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div className="bg-blue-50 p-3 rounded-xl">
-                          <p className="text-xs text-blue-600 font-semibold mb-1">Schedule</p>
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                          <p className="text-xs text-gray-600 font-semibold mb-1">Schedule</p>
                           <p className="text-sm font-bold text-gray-800">
                             {course.schedule && course.schedule.length > 0 
                               ? `${course.schedule[0].dayOfWeek}`
@@ -754,21 +740,21 @@ const AdminDashboard = ({ handleLogout }) => {
                           </p>
                         </div>
                         
-                        <div className="bg-green-50 p-3 rounded-xl">
-                          <p className="text-xs text-green-600 font-semibold mb-1">Credits</p>
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                          <p className="text-xs text-gray-600 font-semibold mb-1">Credits</p>
                           <p className="text-2xl font-bold text-gray-800">{course.credits}</p>
                         </div>
                         
-                        <div className="bg-purple-50 p-3 rounded-xl">
-                          <p className="text-xs text-purple-600 font-semibold mb-1">Capacity</p>
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                          <p className="text-xs text-gray-600 font-semibold mb-1">Capacity</p>
                           <p className="text-sm font-bold text-gray-800">
                             {course.enrolled || 0} / {course.capacity}
                           </p>
                           <p className="text-xs text-gray-600">{course.availableSeats || course.capacity} available</p>
                         </div>
                         
-                        <div className="bg-amber-50 p-3 rounded-xl">
-                          <p className="text-xs text-amber-600 font-semibold mb-1">Min Bid</p>
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                          <p className="text-xs text-gray-600 font-semibold mb-1">Min Bid</p>
                           <p className="text-2xl font-bold text-gray-800">{course.minBid || 0}</p>
                         </div>
                       </div>
@@ -781,7 +767,7 @@ const AdminDashboard = ({ handleLogout }) => {
                       )}
                       
                       {course.description && (
-                        <div className="bg-gray-50 p-4 rounded-xl">
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                           <p className="text-xs text-gray-600 font-semibold mb-2">Description</p>
                           <p className="text-sm text-gray-700 leading-relaxed">{course.description}</p>
                         </div>
@@ -789,6 +775,7 @@ const AdminDashboard = ({ handleLogout }) => {
                       
                       {course.schedule && course.schedule.length > 0 && course.schedule[0].location && (
                         <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
+                          <MapPin className="w-4 h-4" />
                           <span className="font-semibold">Location:</span>
                           <span>{course.schedule[0].location}</span>
                         </div>
@@ -803,7 +790,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   c.instructorName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                   c.departmentName?.toLowerCase().includes(searchTerm.toLowerCase())
                 ).length === 0 && (
-                  <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+                  <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
                     <p className="text-gray-600">No courses found matching "{searchTerm}"</p>
                   </div>
                 )}
@@ -815,7 +802,7 @@ const AdminDashboard = ({ handleLogout }) => {
         {/* Students Tab */}
         {currentTab === 'students' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow-lg p-4 flex justify-between items-center">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex justify-between items-center">
               <div className="flex-1 relative">
                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
@@ -823,7 +810,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   placeholder="Search students..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                 />
               </div>
               <button
@@ -835,7 +822,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   });
                   setShowStudentModal(true);
                 }}
-                className="ml-4 flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-xl transition-all"
+                className="ml-4 flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold hover:bg-gray-800 transition-all"
               >
                 <Plus className="w-5 h-5" />
                 Add Student
@@ -843,8 +830,8 @@ const AdminDashboard = ({ handleLogout }) => {
             </div>
 
             {loading ? (
-              <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
                 <p className="text-gray-600">Loading students...</p>
               </div>
             ) : (
@@ -854,25 +841,25 @@ const AdminDashboard = ({ handleLogout }) => {
                   s.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                   s.departmentName?.toLowerCase().includes(searchTerm.toLowerCase())
                 ).map(student => (
-                  <div key={student.studentId} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all overflow-hidden">
-                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4">
+                  <div key={student.studentId} className="bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all overflow-hidden">
+                    <div className="bg-gray-50 p-4 border-b border-gray-200">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <h3 className="text-xl font-bold text-white mb-1">{student.name}</h3>
-                          <p className="text-sm text-blue-100">{student.email}</p>
+                          <h3 className="text-lg font-bold text-gray-900 mb-1">{student.name}</h3>
+                          <p className="text-sm text-gray-600">{student.email}</p>
                         </div>
                         <div className="flex gap-2">
                           <button
                             onClick={() => openEditStudent(student)}
-                            className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all"
+                            className="p-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg transition-all"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Edit2 className="w-4 h-4 text-gray-700" />
                           </button>
                           <button
                             onClick={() => handleDeleteStudent(student.studentId)}
-                            className="p-2 bg-rose-500/80 hover:bg-rose-600 text-white rounded-lg transition-all"
+                            className="p-2 bg-white border border-red-200 hover:bg-red-50 rounded-lg transition-all"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4 text-red-600" />
                           </button>
                         </div>
                       </div>
@@ -880,13 +867,13 @@ const AdminDashboard = ({ handleLogout }) => {
                     
                     <div className="p-6">
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-purple-50 p-3 rounded-xl">
-                          <p className="text-xs text-purple-600 font-semibold mb-1">Student ID</p>
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                          <p className="text-xs text-gray-600 font-semibold mb-1">Student ID</p>
                           <p className="text-lg font-bold text-gray-800">{student.studentId}</p>
                         </div>
                         
-                        <div className="bg-green-50 p-3 rounded-xl">
-                          <p className="text-xs text-green-600 font-semibold mb-1">Bid Points</p>
+                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                          <p className="text-xs text-gray-600 font-semibold mb-1">Bid Points</p>
                           <p className="text-lg font-bold text-gray-800">{student.bidPoints || 0}</p>
                         </div>
                       </div>
@@ -917,7 +904,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   s.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                   s.departmentName?.toLowerCase().includes(searchTerm.toLowerCase())
                 ).length === 0 && (
-                  <div className="col-span-full bg-white rounded-2xl shadow-lg p-12 text-center">
+                  <div className="col-span-full bg-white rounded-xl border border-gray-200 p-12 text-center">
                     <p className="text-gray-600">No students found matching "{searchTerm}"</p>
                   </div>
                 )}
@@ -929,11 +916,11 @@ const AdminDashboard = ({ handleLogout }) => {
         {/* Bids Tab */}
         {currentTab === 'bids' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-lg p-4 flex justify-between items-center">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 flex justify-between items-center">
               <h2 className="text-xl font-bold text-gray-800">Rounds & Bids Management</h2>
               <button
                 onClick={() => openRoundModal()}
-                className="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-xl transition-all"
+                className="flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-xl font-semibold hover:bg-gray-800 transition-all"
               >
                 <Plus className="w-5 h-5" />
                 Create New Round
@@ -941,8 +928,8 @@ const AdminDashboard = ({ handleLogout }) => {
             </div>
 
             {loading ? (
-              <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
                 <p className="text-gray-600">Loading rounds...</p>
               </div>
             ) : (
@@ -952,14 +939,14 @@ const AdminDashboard = ({ handleLogout }) => {
                   const countdown = getCountdown(round);
                   
                   return (
-                  <div key={round.roundId} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all">
-                    <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-6 text-white">
+                  <div key={round.roundId} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-all">
+                    <div className="bg-gray-50 p-6 border-b border-gray-200">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h3 className="text-2xl font-bold">Round {round.roundNumber}</h3>
-                          <p className="text-indigo-100 mt-1">{round.roundName || 'Unnamed Round'}</p>
+                          <h3 className="text-2xl font-bold text-gray-900">Round {round.roundNumber}</h3>
+                          <p className="text-gray-600 mt-1">{round.roundName || 'Unnamed Round'}</p>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${roundStatus.color} text-white`}>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${roundStatus.color}`}>
                           {roundStatus.label}
                         </span>
                       </div>
@@ -967,9 +954,9 @@ const AdminDashboard = ({ handleLogout }) => {
 
                     <div className="p-6 space-y-4">
                       {/* Real-time Countdown */}
-                      <div className="bg-gradient-to-r from-cyan-50 to-blue-50 p-4 rounded-xl border border-cyan-200">
+                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
                         <p className="text-xs text-gray-600 mb-1">Timer</p>
-                        <p className="text-lg font-bold text-cyan-700">{countdown}</p>
+                        <p className="text-lg font-bold text-blue-700">{countdown}</p>
                       </div>
 
                       <div className="space-y-2 text-sm">
@@ -988,29 +975,29 @@ const AdminDashboard = ({ handleLogout }) => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => fetchRoundBids(round.roundId)}
-                          className="flex-1 flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-all font-semibold"
+                          className="flex-1 flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-all font-semibold border border-gray-300"
                         >
                           <Eye className="w-4 h-4" />
                           View Bids
                         </button>
                         <button
                           onClick={() => openRoundModal(round)}
-                          className="flex items-center justify-center bg-blue-50 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-100 transition-all"
+                          className="flex items-center justify-center bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-all border border-gray-300"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteRound(round.roundId)}
-                          className="flex items-center justify-center bg-red-50 text-red-600 px-4 py-2 rounded-lg hover:bg-red-100 transition-all"
+                          className="flex items-center justify-center bg-red-50 text-red-600 px-4 py-2 rounded-lg hover:bg-red-100 transition-all border border-red-200"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
 
-                      {roundStatus.status === 'completed' && (
+                      {roundStatus.status === 'closed' && (
                         <button
                           onClick={() => handlePublishResults(round.roundId)}
-                          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all font-semibold"
+                          className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-all font-semibold"
                         >
                           <CheckCircle className="w-4 h-4" />
                           Publish Results
@@ -1021,14 +1008,12 @@ const AdminDashboard = ({ handleLogout }) => {
                 )})}
 
                 {rounds.length === 0 && (
-                  <div className="col-span-full bg-white rounded-2xl shadow-lg p-12 text-center">
+                  <div className="col-span-full bg-white rounded-xl border border-gray-200 p-12 text-center">
                     <p className="text-gray-600">No rounds created yet. Click "Create New Round" to get started.</p>
                   </div>
                 )}
               </div>
             )}
-
-            {/* Round Bids Table */}
           </div>
         )}
       </div>
@@ -1036,19 +1021,19 @@ const AdminDashboard = ({ handleLogout }) => {
       {/* Round Bids Modal */}
       {selectedRound && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="bg-gray-50 p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <div>
-                  <h3 className="text-2xl font-bold">Round {selectedRound.roundNumber} - Bids</h3>
-                  <p className="text-indigo-100 mt-1">{selectedRound.roundName || 'Unnamed Round'}</p>
-                  <p className="text-indigo-100 text-sm mt-2">Total Bids: {selectedRound.totalBids || roundBids.length}</p>
+                  <h3 className="text-2xl font-bold text-gray-900">Round {selectedRound.roundNumber} - Bids</h3>
+                  <p className="text-gray-600 mt-1">{selectedRound.roundName || 'Unnamed Round'}</p>
+                  <p className="text-gray-600 text-sm mt-2">Total Bids: {selectedRound.totalBids || roundBids.length}</p>
                 </div>
                 <button
                   onClick={() => { setSelectedRound(null); setRoundBids([]); }}
-                  className="p-2 hover:bg-white/20 rounded-lg transition-all"
+                  className="p-2 hover:bg-gray-200 rounded-lg transition-all"
                 >
-                  <X className="w-6 h-6" />
+                  <X className="w-6 h-6 text-gray-700" />
                 </button>
               </div>
             </div>
@@ -1084,7 +1069,7 @@ const AdminDashboard = ({ handleLogout }) => {
                             <p className="text-sm text-gray-500">{bid.courseName}</p>
                           </div>
                         </td>
-                        <td className="px-6 py-4 font-bold text-indigo-600">{bid.bidAmount} pts</td>
+                        <td className="px-6 py-4 font-bold text-gray-900">{bid.bidAmount} pts</td>
                         <td className="px-6 py-4 text-gray-600">{bid.priority || 'N/A'}</td>
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
@@ -1112,7 +1097,7 @@ const AdminDashboard = ({ handleLogout }) => {
       {/* Course Modal */}
       {showCourseModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">
                 {editingCourse ? 'Edit Course' : 'Add New Course'}
@@ -1130,7 +1115,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="text"
                     value={courseForm.courseName}
                     onChange={(e) => setCourseForm({...courseForm, courseName: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     placeholder="Advanced Algorithms"
                   />
                 </div>
@@ -1140,7 +1125,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="text"
                     value={courseForm.courseCode}
                     onChange={(e) => setCourseForm({...courseForm, courseCode: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     placeholder="CS301"
                   />
                 </div>
@@ -1152,7 +1137,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   <select
                     value={courseForm.deptId}
                     onChange={(e) => setCourseForm({...courseForm, deptId: parseInt(e.target.value)})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   >
                     <option value="">Select Department</option>
                     {departments.map(dept => (
@@ -1168,7 +1153,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="text"
                     value={courseForm.instructorName}
                     onChange={(e) => setCourseForm({...courseForm, instructorName: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     placeholder="Dr. Sarah Mitchell"
                   />
                 </div>
@@ -1181,7 +1166,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="number"
                     value={courseForm.credits}
                     onChange={(e) => setCourseForm({...courseForm, credits: parseInt(e.target.value)})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     placeholder="3"
                   />
                 </div>
@@ -1191,7 +1176,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="number"
                     value={courseForm.minBid}
                     onChange={(e) => setCourseForm({...courseForm, minBid: parseInt(e.target.value)})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     placeholder="50"
                   />
                 </div>
@@ -1201,7 +1186,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="number"
                     value={courseForm.capacity}
                     onChange={(e) => setCourseForm({...courseForm, capacity: parseInt(e.target.value)})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     placeholder="30"
                   />
                 </div>
@@ -1210,7 +1195,7 @@ const AdminDashboard = ({ handleLogout }) => {
               {/* Schedule Section */}
               <div className="border-t-2 border-gray-200 pt-4 mt-4">
                 <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-indigo-600" />
+                  <Calendar className="w-5 h-5 text-gray-700" />
                   Course Schedule
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1219,7 +1204,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     <select
                       value={courseForm.dayOfWeek}
                       onChange={(e) => setCourseForm({...courseForm, dayOfWeek: e.target.value})}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     >
                       <option value="Monday">Monday</option>
                       <option value="Tuesday">Tuesday</option>
@@ -1236,7 +1221,7 @@ const AdminDashboard = ({ handleLogout }) => {
                       type="text"
                       value={courseForm.location}
                       onChange={(e) => setCourseForm({...courseForm, location: e.target.value})}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                       placeholder="Room 305, Building A"
                     />
                   </div>
@@ -1248,7 +1233,7 @@ const AdminDashboard = ({ handleLogout }) => {
                       type="time"
                       value={courseForm.startTime}
                       onChange={(e) => setCourseForm({...courseForm, startTime: e.target.value})}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     />
                   </div>
                   <div>
@@ -1257,7 +1242,7 @@ const AdminDashboard = ({ handleLogout }) => {
                       type="time"
                       value={courseForm.endTime}
                       onChange={(e) => setCourseForm({...courseForm, endTime: e.target.value})}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1272,7 +1257,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="text"
                     value={courseForm.prerequisites}
                     onChange={(e) => setCourseForm({...courseForm, prerequisites: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     placeholder="CS101, MATH201"
                   />
                 </div>
@@ -1281,7 +1266,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   <textarea
                     value={courseForm.description}
                     onChange={(e) => setCourseForm({...courseForm, description: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     placeholder="Course description and objectives..."
                     rows="3"
                   />
@@ -1297,7 +1282,7 @@ const AdminDashboard = ({ handleLogout }) => {
                 </button>
                 <button
                   onClick={editingCourse ? handleUpdateCourse : handleAddCourse}
-                  className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                  className="flex-1 bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
                 >
                   <Save className="w-5 h-5" />
                   {editingCourse ? 'Update' : 'Add'} Course
@@ -1311,7 +1296,7 @@ const AdminDashboard = ({ handleLogout }) => {
       {/* Student Modal */}
       {showStudentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">
                 {editingStudent ? 'Edit Student' : 'Add New Student'}
@@ -1328,7 +1313,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   type="text"
                   value={studentForm.name}
                   onChange={(e) => setStudentForm({...studentForm, name: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   placeholder="John Doe"
                 />
               </div>
@@ -1339,7 +1324,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   type="email"
                   value={studentForm.email}
                   onChange={(e) => setStudentForm({...studentForm, email: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   placeholder="john.doe@university.edu"
                 />
               </div>
@@ -1352,7 +1337,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   type="password"
                   value={studentForm.password}
                   onChange={(e) => setStudentForm({...studentForm, password: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   placeholder="Enter password"
                 />
               </div>
@@ -1363,7 +1348,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   <select
                     value={studentForm.deptId}
                     onChange={(e) => setStudentForm({...studentForm, deptId: parseInt(e.target.value)})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   >
                     <option value="">Select Department</option>
                     {departments.map(dept => (
@@ -1378,7 +1363,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   <select
                     value={studentForm.year}
                     onChange={(e) => setStudentForm({...studentForm, year: parseInt(e.target.value)})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   >
                     <option value="1">Year 1</option>
                     <option value="2">Year 2</option>
@@ -1397,7 +1382,7 @@ const AdminDashboard = ({ handleLogout }) => {
                 </button>
                 <button
                   onClick={editingStudent ? handleUpdateStudent : handleAddStudent}
-                  className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                  className="flex-1 bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
                 >
                   <Save className="w-5 h-5" />
                   {editingStudent ? 'Update' : 'Add'} Student
@@ -1411,7 +1396,7 @@ const AdminDashboard = ({ handleLogout }) => {
       {/* Round Modal */}
       {showRoundModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">
                 {editingRound ? 'Edit Round' : 'Create New Round'}
@@ -1429,7 +1414,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="number"
                     value={roundForm.roundNumber}
                     onChange={(e) => setRoundForm({...roundForm, roundNumber: parseInt(e.target.value)})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                     placeholder="1"
                     min="1"
                   />
@@ -1439,7 +1424,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   <select
                     value={roundForm.status}
                     onChange={(e) => setRoundForm({...roundForm, status: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   >
                     <option value="pending">Pending</option>
                     <option value="active">Active</option>
@@ -1454,7 +1439,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   type="text"
                   value={roundForm.roundName}
                   onChange={(e) => setRoundForm({...roundForm, roundName: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   placeholder="First Round Bidding"
                 />
               </div>
@@ -1466,7 +1451,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="datetime-local"
                     value={roundForm.startTime}
                     onChange={(e) => setRoundForm({...roundForm, startTime: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   />
                 </div>
                 <div>
@@ -1475,7 +1460,7 @@ const AdminDashboard = ({ handleLogout }) => {
                     type="datetime-local"
                     value={roundForm.endTime}
                     onChange={(e) => setRoundForm({...roundForm, endTime: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-gray-400 focus:outline-none"
                   />
                 </div>
               </div>
@@ -1489,7 +1474,7 @@ const AdminDashboard = ({ handleLogout }) => {
                 </button>
                 <button
                   onClick={editingRound ? handleUpdateRound : handleAddRound}
-                  className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                  className="flex-1 bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 transition-all flex items-center justify-center gap-2"
                 >
                   <Save className="w-5 h-5" />
                   {editingRound ? 'Update' : 'Create'} Round
@@ -1502,14 +1487,14 @@ const AdminDashboard = ({ handleLogout }) => {
 
       {/* Error Alert */}
       {error && (
-        <div className="fixed bottom-4 right-4 bg-rose-50 border-2 border-rose-200 rounded-2xl p-4 shadow-xl max-w-md z-50">
+        <div className="fixed bottom-4 right-4 bg-red-50 border-2 border-red-200 rounded-2xl p-4 shadow-xl max-w-md z-50">
           <div className="flex items-center gap-3">
-            <AlertCircle className="w-6 h-6 text-rose-600" />
+            <AlertCircle className="w-6 h-6 text-red-600" />
             <div className="flex-1">
-              <p className="font-semibold text-rose-800">Error</p>
-              <p className="text-sm text-rose-600">{error}</p>
+              <p className="font-semibold text-red-800">Error</p>
+              <p className="text-sm text-red-600">{error}</p>
             </div>
-            <button onClick={() => setError(null)} className="text-rose-600 hover:text-rose-700">
+            <button onClick={() => setError(null)} className="text-red-600 hover:text-red-700">
               <X className="w-5 h-5" />
             </button>
           </div>

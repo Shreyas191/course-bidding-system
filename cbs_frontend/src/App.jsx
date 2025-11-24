@@ -145,7 +145,7 @@ const App = () => {
           name: data.name || '',
           email: data.email || '',
           studentId: data.studentId?.toString() || '',
-          major: data.department || '',  // Backend returns department name
+          department: data.department || '',  // Backend returns department name
           year: data.year?.toString() || '',
           phone: '',
           address: '',
@@ -162,6 +162,15 @@ const App = () => {
       console.error('Error fetching profile:', err);
     }
   };
+
+  const handleBidCancelled = async () => {
+  console.log('Bid cancelled - refreshing data...');
+  // Refresh bids
+  await fetchMyBids();
+  // Refresh wallet balance
+  await fetchUserWallet();
+  console.log('Data refreshed after bid cancellation');
+};
 
   // Fetch user wallet balance
   const fetchUserWallet = async () => {
@@ -617,20 +626,6 @@ const App = () => {
             </div>
           )}
 
-          {!loading && !error && myBids.length > 0 && currentRound <= 2 && (
-            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
-              <p className="text-sm text-amber-800 mb-2">
-                <strong>Demo Mode:</strong> Simulate round ending to see results
-              </p>
-              <button
-                onClick={handleSimulateRoundEnd}
-                className="px-4 py-2 bg-amber-600 text-white rounded-xl font-semibold hover:bg-amber-700 transition-all"
-              >
-                End Round {currentRound} & View Results
-              </button>
-            </div>
-          )}
-
           {currentPage === 'home' && (
             <Home
               cart={cart}
@@ -675,6 +670,8 @@ const App = () => {
               currentRound={currentRound}
               coursesWon={coursesWon}
               coursesLost={coursesLost}
+              onBidCancelled={handleBidCancelled}
+              points={points}
             />
           )}
 

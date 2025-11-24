@@ -1,7 +1,7 @@
 import React from 'react';
-import { TrendingUp, Clock, MapPin, Award, Users, Star, ShoppingCart, CheckCircle } from 'lucide-react';
+import { TrendingUp, Clock, MapPin, Award, Users, ShoppingCart, CheckCircle } from 'lucide-react';
 
-const CourseCard = ({ course, myBid, wonInRound1, handleAddToWaitlist, handleAddToCart, currentRound }) => {
+const CourseCard = ({ course, myBid, wonInRound1, handleAddToCart, currentRound }) => {
   const seatsLeft = course.seats - course.enrolled;
   const seatPercentage = (course.enrolled / course.seats) * 100;
 
@@ -11,9 +11,6 @@ const CourseCard = ({ course, myBid, wonInRound1, handleAddToWaitlist, handleAdd
         <div className="flex justify-between items-start mb-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              {/* <span className="text-sm font-bold text-cyan-700 bg-cyan-50 px-3 py-1 rounded-full">
-                {course.code}
-              </span> */}
               {course.popularity === 'high' && (
                 <span className="flex items-center gap-1 text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-1 rounded-full">
                   <TrendingUp className="w-3 h-3" />
@@ -30,10 +27,6 @@ const CourseCard = ({ course, myBid, wonInRound1, handleAddToWaitlist, handleAdd
             <h3 className="text-xl font-bold text-gray-800">{course.name}</h3>
             <p className="text-gray-600 text-sm mt-1">{course.instructor}</p>
           </div>
-          {/* <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-lg">
-            <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-            <span className="font-semibold text-amber-700">{course.rating}</span>
-          </div> */}
         </div>
 
         <div className="space-y-2 text-sm text-gray-600 mb-4">
@@ -108,21 +101,13 @@ const CourseCard = ({ course, myBid, wonInRound1, handleAddToWaitlist, handleAdd
             </div>
           </div>
         ) : (
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleAddToCart(course.id, course.avgBid)}
-              className="flex-1 bg-gradient-to-r from-cyan-600 to-teal-600 text-white py-3 rounded-2xl font-semibold hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center gap-2"
-            >
-              <ShoppingCart className="w-5 h-5" />
-              Add to Cart
-            </button>
-            <button
-              onClick={() => handleAddToWaitlist(course.id)}
-              className="px-4 py-3 bg-amber-100 text-amber-700 rounded-2xl font-semibold hover:bg-amber-200 transition-all text-sm"
-            >
-              Waitlist
-            </button>
-          </div>
+          <button
+            onClick={() => handleAddToCart(course.id, course.avgBid)}
+            className="w-full bg-gradient-to-r from-cyan-600 to-teal-600 text-white py-3 rounded-2xl font-semibold hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center gap-2"
+          >
+            <ShoppingCart className="w-5 h-5" />
+            Add to Cart
+          </button>
         )}
       </div>
     </div>
