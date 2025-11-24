@@ -53,42 +53,78 @@ public class BidServiceImpl implements BidService {
         // Check if student already has a bid for this course in this round
         Bid existingBid = bidRepository.findByStudentAndCourseAndRound(studentId, request.getCourseId(), roundId);
         
-        // Calculate total bid amount for this student in this round
+        // Get current wallet balance
+        Integer currentBalance = walletRepository.getBalance(studentId);
+        
+        // Calculate total pending bids for this student in this round (excluding current bid if updating)
         Integer currentTotalBids = bidRepository.getTotalBidAmountByStudentAndRound(studentId, roundId);
-        if (existingBid != null) {
-            // Subtract existing bid amount since it will be updated
-            currentTotalBids -= existingBid.getBidAmount();
-        }
-        
-        // Check wallet balance
-        Integer balance = walletRepository.getBalance(studentId);
-        if (balance < currentTotalBids + request.getBidAmount()) {
-            throw new RuntimeException("Insufficient balance. Available: " + balance + ", Required: " + (currentTotalBids + request.getBidAmount()));
-        }
-        
-        // Create or update bid
-        Bid bid = new Bid();
-        bid.setStudentId(studentId);
-        bid.setCourseId(request.getCourseId());
-        bid.setRoundId(roundId);
-        bid.setBidAmount(request.getBidAmount());
-        bid.setStatus("pending");
         
         Long bidId;
         
         if (existingBid != null) {
-            // Update existing bid - refund old amount, deduct new amount
-            walletRepository.addPoints(studentId, existingBid.getBidAmount()); // Refund old bid
-            walletRepository.deductPoints(studentId, request.getBidAmount()); // Deduct new bid
-            bid.setBidId(existingBid.getBidId());
-            bidRepository.update(bid);
+            // UPDATING EXISTING BID
+            log.info("Updating existing bid {} from {} to {} points", existingBid.getBidId(), existingBid.getBidAmount(), request.getBidAmount());
+            
+            // Calculate the difference needed
+            int bidDifference = request.getBidAmount() - existingBid.getBidAmount();
+            
+            if (bidDifference > 0) {
+                // User wants to INCREASE the bid - need MORE points
+                // Check if user has enough balance for the ADDITIONAL amount
+                if (currentBalance < bidDifference) {
+                    throw new RuntimeException(String.format(
+                        "Insufficient balance. You need %d more points (current bid: %d, new bid: %d). Available balance: %d points",
+                        bidDifference, existingBid.getBidAmount(), request.getBidAmount(), currentBalance
+                    ));
+                }
+                // Deduct only the additional amount
+                walletRepository.deductPoints(studentId, bidDifference);
+                log.info("Deducted {} additional points from student {}", bidDifference, studentId);
+            } else if (bidDifference < 0) {
+                // User wants to DECREASE the bid - REFUND points
+                int refundAmount = Math.abs(bidDifference);
+                walletRepository.addPoints(studentId, refundAmount);
+                log.info("Refunded {} points to student {}", refundAmount, studentId);
+            }
+            // If bidDifference == 0, no wallet change needed
+            
+            // Update the bid
+            existingBid.setBidAmount(request.getBidAmount());
+            bidRepository.update(existingBid);
             bidId = existingBid.getBidId();
-            log.info("Updated bid {} for student {}: {} -> {} points", bidId, studentId, existingBid.getBidAmount(), request.getBidAmount());
+            
+            log.info("Bid {} updated successfully. New amount: {}, Wallet change: {}", 
+                     bidId, request.getBidAmount(), bidDifference);
+            
         } else {
-            // New bid - deduct points immediately
+            // NEW BID
+            log.info("Creating new bid for student {} on course {}", studentId, request.getCourseId());
+            
+            // For new bids, check if user has enough balance for the full amount
+            // Also need to account for other pending bids in this round
+            int totalNeeded = currentTotalBids + request.getBidAmount();
+            
+            if (currentBalance < request.getBidAmount()) {
+                throw new RuntimeException(String.format(
+                    "Insufficient balance. Required: %d points, Available: %d points",
+                    request.getBidAmount(), currentBalance
+                ));
+            }
+            
+            // Deduct the full bid amount for new bids
             walletRepository.deductPoints(studentId, request.getBidAmount());
+            log.info("Deducted {} points from student {} for new bid", request.getBidAmount(), studentId);
+            
+            // Create new bid
+            Bid bid = new Bid();
+            bid.setStudentId(studentId);
+            bid.setCourseId(request.getCourseId());
+            bid.setRoundId(roundId);
+            bid.setBidAmount(request.getBidAmount());
+            bid.setStatus("pending");
+            
             bidId = bidRepository.save(bid);
-            log.info("Created new bid {} for student {}: {} points deducted", bidId, studentId, request.getBidAmount());
+            log.info("Created new bid {} for student {}", bidId, studentId);
         }
         
         return convertToDto(bidRepository.findById(bidId), course, round);
@@ -125,6 +161,10 @@ public class BidServiceImpl implements BidService {
         if (!"pending".equals(bid.getStatus())) {
             throw new RuntimeException("Can only cancel pending bids");
         }
+        
+        // Refund the bid amount back to wallet
+        walletRepository.addPoints(studentId, bid.getBidAmount());
+        log.info("Refunded {} points to student {} for cancelled bid {}", bid.getBidAmount(), studentId, bidId);
         
         bidRepository.delete(bidId);
         log.info("Bid {} cancelled by student {}", bidId, studentId);

@@ -45,13 +45,13 @@ const Header = ({ userProfile, points, showMobileMenu, setShowMobileMenu, cart, 
                 </span>
               )}
             </button>
-            <div className="hidden md:flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-teal-600 text-white px-5 py-2 rounded-xl shadow-lg">
+            {/* <div className="hidden md:flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-teal-600 text-white px-5 py-2 rounded-xl shadow-lg">
               <DollarSign className="w-5 h-5" />
               <div>
                 <p className="text-xs opacity-90">Points</p>
                 <p className="text-xl font-bold">{points}</p>
               </div>
-            </div>
+            </div> */}
             <button
               onClick={() => setShowMobileMenu(!showMobileMenu)}
               className="md:hidden p-2 rounded-xl hover:bg-gray-100"
