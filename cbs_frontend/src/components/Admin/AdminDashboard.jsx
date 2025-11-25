@@ -575,143 +575,156 @@ const AdminDashboard = ({ handleLogout }) => {
 
   // Round CRUD operations
   const handleAddRound = async () => {
-    try {
-      // Convert local datetime to MySQL format (YYYY-MM-DD HH:mm:ss)
-      const formatForMySQL = (datetimeLocal) => {
-        if (!datetimeLocal) return null;
-        const date = new Date(datetimeLocal);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-      };
-
-      const roundData = {
-        ...roundForm,
-        startTime: formatForMySQL(roundForm.startTime),
-        endTime: formatForMySQL(roundForm.endTime)
-      };
-
-      console.log('📤 Adding round to:', `${API_URL}/api/admin/rounds`);
-      const response = await fetch(`${API_URL}/api/admin/rounds`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(roundData)
-      });
+  try {
+    // ✅ NEW: Convert local datetime to UTC for MySQL
+    const formatForMySQLUTC = (datetimeLocal) => {
+      if (!datetimeLocal) return null;
       
-      if (response.ok) {
-        console.log('✅ Round created successfully');
-        alert('Round created successfully!');
-        setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
-        await fetchRounds(); // Wait for rounds to refresh
-        setShowRoundModal(false); // Close modal after refresh
-      } else {
-        throw new Error('Failed to create round');
-      }
-    } catch (err) {
-      console.error('❌ Error creating round:', err);
-      alert('Error creating round: ' + err.message);
+      // Create Date object from local datetime-local input
+      const localDate = new Date(datetimeLocal);
+      
+      // Get UTC components
+      const year = localDate.getUTCFullYear();
+      const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(localDate.getUTCDate()).padStart(2, '0');
+      const hours = String(localDate.getUTCHours()).padStart(2, '0');
+      const minutes = String(localDate.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(localDate.getUTCSeconds()).padStart(2, '0');
+      
+      // Return in MySQL UTC format
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    };
+
+    const roundData = {
+      ...roundForm,
+      startTime: formatForMySQLUTC(roundForm.startTime),
+      endTime: formatForMySQLUTC(roundForm.endTime)
+    };
+
+    console.log('📤 Adding round with UTC times:', roundData);
+    const response = await fetch(`${API_URL}/api/admin/rounds`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(roundData)
+    });
+    
+    if (response.ok) {
+      console.log('✅ Round created successfully');
+      alert('Round created successfully!');
+      setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
+      await fetchRounds();
+      setShowRoundModal(false);
+    } else {
+      throw new Error('Failed to create round');
     }
-  };
+  } catch (err) {
+    console.error('❌ Error creating round:', err);
+    alert('Error creating round: ' + err.message);
+  }
+};
+
 
   const handleUpdateRound = async () => {
-    try {
-      // Convert local datetime to MySQL format (YYYY-MM-DD HH:mm:ss)
-      const formatForMySQL = (datetimeLocal) => {
-        if (!datetimeLocal) return null;
-        const date = new Date(datetimeLocal);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-      };
+  try {
+    // ✅ NEW: Convert local datetime to UTC for MySQL
+    const formatForMySQLUTC = (datetimeLocal) => {
+      if (!datetimeLocal) return null;
       
-      const startFormatted = formatForMySQL(roundForm.startTime);
-      const endFormatted = formatForMySQL(roundForm.endTime);
+      // Create Date object from local datetime-local input
+      const localDate = new Date(datetimeLocal);
       
-      console.log('=== ROUND UPDATE DEBUG ===');
-      console.log('Original form values:', roundForm.startTime, roundForm.endTime);
-      console.log('MySQL formatted:', startFormatted, endFormatted);
+      // Get UTC components
+      const year = localDate.getUTCFullYear();
+      const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(localDate.getUTCDate()).padStart(2, '0');
+      const hours = String(localDate.getUTCHours()).padStart(2, '0');
+      const minutes = String(localDate.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(localDate.getUTCSeconds()).padStart(2, '0');
       
-      // Validate BOTH times are provided
-      if (!roundForm.startTime || !roundForm.endTime) {
-        alert('Both start time and end time are required!');
-        return;
-      }
-      
-      // Validate end time is after start time
-      const startDate = new Date(roundForm.startTime);
-      const endDate = new Date(roundForm.endTime);
-      
-      console.log('Start date object:', startDate);
-      console.log('End date object:', endDate);
-      console.log('End > Start?', endDate > startDate);
-      
-      if (endDate <= startDate) {
-        alert('Error: End time must be after start time!\n\n' +
-              `Start: ${startDate.toLocaleString()}\n` +
-              `End: ${endDate.toLocaleString()}`);
-        return;
-      }
-      
-      const roundData = {
-        roundNumber: roundForm.roundNumber,
-        roundName: roundForm.roundName,
-        startTime: startFormatted,
-        endTime: endFormatted,
-        status: roundForm.status
-      };
-      
-      console.log('Final payload being sent:', JSON.stringify(roundData, null, 2));
-      console.log('📤 Updating round:', `${API_URL}/api/admin/rounds/${editingRound.roundId}`);
-
-      const response = await fetch(`${API_URL}/api/admin/rounds/${editingRound.roundId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(roundData)
-      });
-      
-      console.log('Response status:', response.status);
-      
-      if (response.ok) {
-        console.log('✅ Round updated successfully');
-        alert('Round updated successfully!');
-        setEditingRound(null);
-        setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
-        await fetchRounds(); // Wait for rounds to refresh
-        setShowRoundModal(false); // Close modal after refresh
-      } else {
-        const errorText = await response.text();
-        console.error('Backend error response:', errorText);
-        
-        // Try to parse as JSON
-        try {
-          const errorJson = JSON.parse(errorText);
-          console.error('Parsed error:', errorJson);
-          alert('Failed to update round:\n' + (errorJson.message || errorJson.error || errorText));
-        } catch (e) {
-          alert('Failed to update round:\n' + errorText);
-        }
-        
-        throw new Error(errorText);
-      }
-    } catch (err) {
-      console.error('=== FULL ERROR ===', err);
-      console.error('Error stack:', err.stack);
+      // Return in MySQL UTC format
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    };
+    
+    const startFormatted = formatForMySQLUTC(roundForm.startTime);
+    const endFormatted = formatForMySQLUTC(roundForm.endTime);
+    
+    console.log('=== ROUND UPDATE DEBUG (UTC) ===');
+    console.log('Local form values:', roundForm.startTime, roundForm.endTime);
+    console.log('UTC MySQL formatted:', startFormatted, endFormatted);
+    
+    // Validate BOTH times are provided
+    if (!roundForm.startTime || !roundForm.endTime) {
+      alert('Both start time and end time are required!');
+      return;
     }
-  };
+    
+    // Validate end time is after start time (in local time for user feedback)
+    const startDate = new Date(roundForm.startTime);
+    const endDate = new Date(roundForm.endTime);
+    
+    console.log('Local start date:', startDate);
+    console.log('Local end date:', endDate);
+    console.log('End > Start?', endDate > startDate);
+    
+    if (endDate <= startDate) {
+      alert('Error: End time must be after start time!\n\n' +
+            `Start: ${startDate.toLocaleString()}\n` +
+            `End: ${endDate.toLocaleString()}`);
+      return;
+    }
+    
+    const roundData = {
+      roundNumber: roundForm.roundNumber,
+      roundName: roundForm.roundName,
+      startTime: startFormatted,  // ✅ UTC time
+      endTime: endFormatted,      // ✅ UTC time
+      status: roundForm.status
+    };
+    
+    console.log('Final UTC payload:', JSON.stringify(roundData, null, 2));
+    console.log('📤 Updating round:', `${API_URL}/api/admin/rounds/${editingRound.roundId}`);
+
+    const response = await fetch(`${API_URL}/api/admin/rounds/${editingRound.roundId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(roundData)
+    });
+    
+    console.log('Response status:', response.status);
+    
+    if (response.ok) {
+      console.log('✅ Round updated successfully');
+      alert('Round updated successfully!');
+      setEditingRound(null);
+      setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
+      await fetchRounds();
+      setShowRoundModal(false);
+    } else {
+      const errorText = await response.text();
+      console.error('Backend error response:', errorText);
+      
+      try {
+        const errorJson = JSON.parse(errorText);
+        console.error('Parsed error:', errorJson);
+        alert('Failed to update round:\n' + (errorJson.message || errorJson.error || errorText));
+      } catch (e) {
+        alert('Failed to update round:\n' + errorText);
+      }
+      
+      throw new Error(errorText);
+    }
+  } catch (err) {
+    console.error('=== FULL ERROR ===', err);
+    console.error('Error stack:', err.stack);
+  }
+};
+
 
   const handleDeleteRound = async (roundId) => {
     if (!window.confirm('Are you sure you want to delete this round?')) return;
