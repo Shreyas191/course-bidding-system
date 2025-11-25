@@ -12,6 +12,7 @@ import MyBids from './components/Bids/MyBids';
 import RegisteredCourses from './components/Registered/RegisteredCourses';
 import Waitlist from './components/Waitlist/Waitlist';
 import Profile from './components/Profile/Profile';
+import { API_URL } from './config';
 
 // Helper function to transform API response to app format
 const transformCourseData = (apiCourses, preserveEnrollmentId = false) => {
@@ -103,6 +104,12 @@ const App = () => {
   const [registeredCourses, setRegisteredCourses] = useState([]);
   const [waitlist, setWaitlist] = useState([]);
 
+  // Log API URL on mount (for debugging)
+  useEffect(() => {
+    console.log('🌐 Using API URL:', API_URL);
+    console.log('📍 Environment:', import.meta.env.MODE);
+  }, []);
+
   // Helper function to get auth headers
   const getAuthHeaders = () => {
     const token = localStorage.getItem('authToken');
@@ -142,12 +149,14 @@ const App = () => {
   // Fetch user profile
   const fetchUserProfile = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/students/me', {
+      console.log('📥 Fetching user profile from:', `${API_URL}/api/students/me`);
+      const response = await fetch(`${API_URL}/api/students/me`, {
         headers: getAuthHeaders()
       });
       
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Profile fetched:', data);
         setUserProfile({
           name: data.name || '',
           email: data.email || '',
@@ -164,65 +173,75 @@ const App = () => {
           setPoints(data.bidPoints);
         }
         setTempProfile({...userProfile, ...data});
+      } else {
+        console.error('❌ Failed to fetch profile:', response.status);
       }
     } catch (err) {
-      console.error('Error fetching profile:', err);
+      console.error('❌ Error fetching profile:', err);
     }
   };
 
   const handleBidCancelled = async () => {
-    console.log('Bid cancelled - refreshing data...');
+    console.log('🔄 Bid cancelled - refreshing data...');
     // Refresh bids
     await fetchMyBids();
     // Refresh wallet balance
     await fetchUserWallet();
-    console.log('Data refreshed after bid cancellation');
+    console.log('✅ Data refreshed after bid cancellation');
   };
 
   // NEW: Handle course dropped - refreshes all relevant data
   const handleCourseDropped = async () => {
-    console.log('Course dropped - refreshing all data...');
+    console.log('🔄 Course dropped - refreshing all data...');
     try {
       // Refresh all relevant data after dropping a course
       await fetchMyEnrollments();  // Update registered courses
       await fetchUserWallet();      // Update wallet balance
       await fetchMyBids();          // Update bids (in case any changed)
       await fetchMyWaitlist();      // Update waitlist (in case promoted)
-      console.log('All data refreshed after course drop');
+      console.log('✅ All data refreshed after course drop');
     } catch (err) {
-      console.error('Error refreshing data after course drop:', err);
+      console.error('❌ Error refreshing data after course drop:', err);
     }
   };
 
   // Fetch user wallet balance
   const fetchUserWallet = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/wallet/me', {
+      console.log('📥 Fetching wallet from:', `${API_URL}/api/wallet/me`);
+      const response = await fetch(`${API_URL}/api/wallet/me`, {
         headers: getAuthHeaders()
       });
       
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Wallet fetched:', data);
         setPoints(data.balance || 100);
+      } else {
+        console.error('❌ Failed to fetch wallet:', response.status);
       }
     } catch (err) {
-      console.error('Error fetching wallet:', err);
+      console.error('❌ Error fetching wallet:', err);
     }
   };
 
   // Fetch all rounds
   const fetchAllRounds = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/rounds', {
+      console.log('📥 Fetching rounds from:', `${API_URL}/api/rounds`);
+      const response = await fetch(`${API_URL}/api/rounds`, {
         headers: getAuthHeaders()
       });
       
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Rounds fetched:', data);
         setAllRounds(data || []);
+      } else {
+        console.error('❌ Failed to fetch rounds:', response.status);
       }
     } catch (err) {
-      console.error('Error fetching rounds:', err);
+      console.error('❌ Error fetching rounds:', err);
     }
   };
 
@@ -232,7 +251,8 @@ const App = () => {
     setError(null);
     
     try {
-      const response = await fetch('http://localhost:8080/api/courses', {
+      console.log('📥 Fetching courses from:', `${API_URL}/api/courses`);
+      const response = await fetch(`${API_URL}/api/courses`, {
         headers: getAuthHeaders()
       });
       
@@ -241,7 +261,7 @@ const App = () => {
       }
       
       const data = await response.json();
-      console.log('Fetched courses:', data);
+      console.log('✅ Courses fetched:', data.length, 'courses');
       
       const transformedCourses = transformCourseData(data);
       setCourses(transformedCourses);
@@ -250,8 +270,8 @@ const App = () => {
       setCategories(uniqueCategories);
       
     } catch (err) {
-      console.error('Error fetching courses:', err);
-      setError('Failed to load courses. Please check if the backend server is running.');
+      console.error('❌ Error fetching courses:', err);
+      setError('Failed to load courses from Railway backend. Please check the connection.');
       setCourses([]);
     } finally {
       setLoading(false);
@@ -261,17 +281,17 @@ const App = () => {
   // Fetch user's enrolled courses
   const fetchMyEnrollments = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/courses/my-enrollments', {
+      console.log('📥 Fetching enrollments from:', `${API_URL}/api/courses/my-enrollments`);
+      const response = await fetch(`${API_URL}/api/courses/my-enrollments`, {
         headers: getAuthHeaders()
       });
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Raw enrollment data from API:', data); // DEBUG
+        console.log('✅ Enrollments fetched:', data);
         
         // Transform and ADD grade/status without losing enrollmentId
         const transformedEnrollments = transformCourseData(data, true).map(course => {
-          console.log('Transformed course:', course); // DEBUG
           return {
             ...course,
             grade: 'A',
@@ -280,42 +300,52 @@ const App = () => {
           };
         });
         
-        console.log('Final transformed enrollments:', transformedEnrollments); // DEBUG
+        console.log('✅ Transformed enrollments:', transformedEnrollments);
         setRegisteredCourses(transformedEnrollments);
+      } else {
+        console.error('❌ Failed to fetch enrollments:', response.status);
       }
     } catch (err) {
-      console.error('Error fetching enrollments:', err);
+      console.error('❌ Error fetching enrollments:', err);
     }
   };
 
   // Fetch user's bids
   const fetchMyBids = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/bids/my-bids', {
+      console.log('📥 Fetching bids from:', `${API_URL}/api/bids/my-bids`);
+      const response = await fetch(`${API_URL}/api/bids/my-bids`, {
         headers: getAuthHeaders()
       });
       
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Bids fetched:', data);
         setMyBids(data || []);
+      } else {
+        console.error('❌ Failed to fetch bids:', response.status);
       }
     } catch (err) {
-      console.error('Error fetching bids:', err);
+      console.error('❌ Error fetching bids:', err);
     }
   };
 
   const fetchMyWaitlist = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/waitlist/my-waitlist', {
+      console.log('📥 Fetching waitlist from:', `${API_URL}/api/waitlist/my-waitlist`);
+      const response = await fetch(`${API_URL}/api/waitlist/my-waitlist`, {
         headers: getAuthHeaders()
       });
       
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Waitlist fetched:', data);
         setWaitlist(data || []);
+      } else {
+        console.error('❌ Failed to fetch waitlist:', response.status);
       }
     } catch (err) {
-      console.error('Error fetching waitlist:', err);
+      console.error('❌ Error fetching waitlist:', err);
     }
   };
 
@@ -332,7 +362,8 @@ const App = () => {
     setError(null);
     
     try {
-      const response = await fetch('http://localhost:8080/api/auth/login', {
+      console.log('🔐 Attempting login to:', `${API_URL}/api/auth/login`);
+      const response = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -349,7 +380,7 @@ const App = () => {
       }
 
       const data = await response.json();
-      console.log('Login successful:', data);
+      console.log('✅ Login successful:', data);
       
       // Check if user is admin
       const userIsAdmin = data.role === 'admin' || 
@@ -361,6 +392,7 @@ const App = () => {
       // Store token
       if (data.token) {
         localStorage.setItem('authToken', data.token);
+        console.log('✅ Auth token stored');
       }
       
       // Store admin status
@@ -385,7 +417,7 @@ const App = () => {
       setLoginForm({ email: '', password: '' });
       
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('❌ Login error:', err);
       setError(err.message || 'Login failed. Please check your credentials.');
       alert('Login failed: ' + (err.message || 'Please check your credentials and try again.'));
     } finally {
@@ -394,6 +426,7 @@ const App = () => {
   };
 
   const handleLogout = () => {
+    console.log('👋 Logging out...');
     localStorage.removeItem('authToken');
     localStorage.removeItem('isAdmin');
     
@@ -420,6 +453,7 @@ const App = () => {
       gpa: '',
       credits: ''
     });
+    console.log('✅ Logged out successfully');
   };
 
   const handleAddToCart = (courseId, bidAmount) => {
@@ -488,7 +522,7 @@ const App = () => {
     }
 
     try {
-      console.log('Starting checkout process...');
+      console.log('🛒 Starting checkout process...');
       console.log('Cart items:', cart);
       console.log('Current round:', currentRound);
       
@@ -498,9 +532,9 @@ const App = () => {
           courseId: item.courseId,
           bidAmount: item.bidAmount
         };
-        console.log('Submitting bid:', bidData);
+        console.log('📤 Submitting bid:', bidData);
         
-        const response = await fetch('http://localhost:8080/api/bids', {
+        const response = await fetch(`${API_URL}/api/bids`, {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify(bidData)
@@ -508,16 +542,16 @@ const App = () => {
         
         if (!response.ok) {
           const error = await response.text();
-          console.error('Bid submission failed:', error);
+          console.error('❌ Bid submission failed:', error);
           throw new Error('Failed to submit bid: ' + error);
         }
         
         const result = await response.json();
-        console.log('Bid created:', result);
+        console.log('✅ Bid created:', result);
       }
 
       // Refresh data after successful checkout
-      console.log('Fetching updated bids...');
+      console.log('🔄 Fetching updated bids...');
       await fetchMyBids();
       await fetchUserWallet();
       
@@ -526,7 +560,7 @@ const App = () => {
       alert('Successfully placed ' + cart.length + ' bid(s) in Round ' + currentRound + '!\n\nYour bids are now active. Check "My Bids" to track their status.');
       
     } catch (err) {
-      console.error('Checkout error:', err);
+      console.error('❌ Checkout error:', err);
       alert('Failed to place bids. Please try again.');
     }
   };
@@ -638,14 +672,16 @@ const App = () => {
           {loading && (currentPage === 'browse' || currentPage === 'home') && (
             <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading data from backend...</p>
+              <p className="text-gray-600">Loading data from Railway backend...</p>
+              <p className="text-gray-400 text-sm mt-2">{API_URL}</p>
             </div>
           )}
 
           {error && (currentPage === 'browse' || currentPage === 'home') && (
             <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
               <p className="text-red-700 font-semibold mb-2">⚠️ Error Loading Data</p>
-              <p className="text-red-600 text-sm mb-4">{error}</p>
+              <p className="text-red-600 text-sm mb-2">{error}</p>
+              <p className="text-gray-500 text-xs mb-4">Backend URL: {API_URL}</p>
               <button
                 onClick={() => window.location.reload()}
                 className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all font-semibold"
