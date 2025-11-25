@@ -15,7 +15,7 @@ public class CorsConfig {
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
-        config.setAllowedOrigins(Arrays.asList("http://localhost:5174", "http://localhost:5173", "https://course-bidding-system-ax11b1mg5-shreyas191s-projects.vercel.app"));
+        config.setAllowedOrigins(Arrays.asList("http://localhost:5174", "http://localhost:5173", "https://course-bidding-system.vercel.app"));
         config.setAllowedHeaders(Arrays.asList("*"));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setMaxAge(3600L);
