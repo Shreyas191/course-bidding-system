@@ -19,30 +19,62 @@ public class RoundSchedulerService {
     private final NotificationService notificationService;
 
     /**
-     * Check every minute if any round should be activated (NOT auto-close)
+     * Check every minute for rounds that need status updates
+     * - Activate pending rounds when start time arrives
+     * - Close active rounds when end time arrives
      */
-    @Scheduled(fixedRate = 60000) // Run every minute
+    @Scheduled(fixedRate = 60000) // Run every minute (60,000 ms)
     public void checkAndUpdateRoundStatus() {
         try {
             Timestamp now = new Timestamp(System.currentTimeMillis());
             List<Round> allRounds = roundRepository.findAll();
 
             for (Round round : allRounds) {
-                // ONLY auto-activate pending rounds when start time arrives
-                // DO NOT auto-close - admin will close manually
+                String oldStatus = round.getStatus();
+                boolean statusChanged = false;
+
+                // AUTO-ACTIVATE: pending → active when start time arrives
                 if ("pending".equalsIgnoreCase(round.getStatus()) && 
                     round.getStartTime() != null && 
                     now.after(round.getStartTime())) {
                     
                     round.setStatus("active");
-                    roundRepository.update(round);
-                    log.info("Auto-activated round: {} at {}", round.getRoundName(), now);
+                    roundRepository.updateStatus(round.getRoundId(), "active");
+                    statusChanged = true;
                     
-                    // Send notification to all students
-                    notificationService.sendNotificationToAll(
-                        round.getRoundName() + " has started! You can now place your bids.",
-                        "ROUND_STARTED"
+                    log.info("⏰ AUTO-ACTIVATED round {} '{}' at {}", 
+                        round.getRoundId(), round.getRoundName(), now);
+                    
+                    // Notify students that round has started
+                    notificationService.broadcastSystemNotification(
+                        "🔔 Round Started: " + round.getRoundName(),
+                        "Bidding is now OPEN! Start placing your bids before the deadline."
                     );
+                }
+                
+                // AUTO-CLOSE: active → closed when end time arrives
+                else if ("active".equalsIgnoreCase(round.getStatus()) && 
+                         round.getEndTime() != null && 
+                         now.after(round.getEndTime())) {
+                    
+                    round.setStatus("closed");
+                    roundRepository.updateStatus(round.getRoundId(), "closed");
+                    statusChanged = true;
+                    
+                    log.info("⏰ AUTO-CLOSED round {} '{}' at {}", 
+                        round.getRoundId(), round.getRoundName(), now);
+                    
+                    // Notify students that round has closed
+                    notificationService.broadcastSystemNotification(
+                        "⏱️ Round Closed: " + round.getRoundName(),
+                        "Bidding has ended for " + round.getRoundName() + ". " +
+                        "Results will be published soon by the admin."
+                    );
+                }
+
+                if (statusChanged) {
+                    log.info("Round {} status changed: {} → {}", 
+                        round.getRoundId(), oldStatus, round.getStatus());
                 }
             }
         } catch (Exception e) {
