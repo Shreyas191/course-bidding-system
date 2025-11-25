@@ -5,6 +5,7 @@ import {
   Search, X, Save, CheckCircle, AlertCircle, LogOut, Home as HomeIcon,
   Calendar, Clock, MapPin, Eye, Activity, List, UserCheck
 } from 'lucide-react';
+import { API_URL } from '../../config';
 
 const AdminDashboard = ({ handleLogout }) => {
   const [currentTab, setCurrentTab] = useState('overview');
@@ -64,6 +65,11 @@ const AdminDashboard = ({ handleLogout }) => {
   });
 
   const token = localStorage.getItem('authToken');
+
+  // Log API URL on mount (for debugging)
+  useEffect(() => {
+    console.log('🔧 Admin Dashboard using API URL:', API_URL);
+  }, []);
 
   // Helper function to format time (remove seconds)
   const formatTime = (time) => {
@@ -181,27 +187,34 @@ const AdminDashboard = ({ handleLogout }) => {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/departments', {
+      console.log('📥 Fetching departments from:', `${API_URL}/api/departments`);
+      const response = await fetch(`${API_URL}/api/departments`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Departments fetched:', data);
         setDepartments(data);
+      } else {
+        console.error('❌ Failed to fetch departments:', response.status);
       }
     } catch (err) {
-      console.error('Failed to fetch departments:', err);
+      console.error('❌ Failed to fetch departments:', err);
     }
   };
 
   const fetchCourses = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/courses', {
+      console.log('📥 Fetching courses from:', `${API_URL}/api/courses`);
+      const response = await fetch(`${API_URL}/api/courses`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
+      console.log('✅ Courses fetched:', data.length, 'courses');
       setCourses(data);
     } catch (err) {
+      console.error('❌ Error fetching courses:', err);
       setError('Failed to fetch courses');
     } finally {
       setLoading(false);
@@ -211,12 +224,15 @@ const AdminDashboard = ({ handleLogout }) => {
   const fetchStudents = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/admin/students', {
+      console.log('📥 Fetching students from:', `${API_URL}/api/admin/students`);
+      const response = await fetch(`${API_URL}/api/admin/students`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
+      console.log('✅ Students fetched:', data.length, 'students');
       setStudents(data);
     } catch (err) {
+      console.error('❌ Error fetching students:', err);
       setError('Failed to fetch students');
     } finally {
       setLoading(false);
@@ -226,12 +242,15 @@ const AdminDashboard = ({ handleLogout }) => {
   const fetchBids = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/admin/bids', {
+      console.log('📥 Fetching bids from:', `${API_URL}/api/admin/bids`);
+      const response = await fetch(`${API_URL}/api/admin/bids`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
+      console.log('✅ Bids fetched:', data.length, 'bids');
       setBids(data);
     } catch (err) {
+      console.error('❌ Error fetching bids:', err);
       setError('Failed to fetch bids');
     } finally {
       setLoading(false);
@@ -241,12 +260,15 @@ const AdminDashboard = ({ handleLogout }) => {
   const fetchRounds = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/admin/rounds', {
+      console.log('📥 Fetching rounds from:', `${API_URL}/api/admin/rounds`);
+      const response = await fetch(`${API_URL}/api/admin/rounds`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
+      console.log('✅ Rounds fetched:', data.length, 'rounds');
       setRounds(data);
     } catch (err) {
+      console.error('❌ Error fetching rounds:', err);
       setError('Failed to fetch rounds');
     } finally {
       setLoading(false);
@@ -256,13 +278,16 @@ const AdminDashboard = ({ handleLogout }) => {
   const fetchRoundBids = async (roundId) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/rounds/${roundId}`, {
+      console.log('📥 Fetching round bids from:', `${API_URL}/api/admin/rounds/${roundId}`);
+      const response = await fetch(`${API_URL}/api/admin/rounds/${roundId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
+      console.log('✅ Round bids fetched:', data);
       setSelectedRound(data);
       setRoundBids(data.bids || []);
     } catch (err) {
+      console.error('❌ Error fetching round bids:', err);
       setError('Failed to fetch round bids');
     } finally {
       setLoading(false);
@@ -272,14 +297,19 @@ const AdminDashboard = ({ handleLogout }) => {
   const fetchAllWaitlists = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/admin/waitlists', {
+      console.log('📥 Fetching waitlists from:', `${API_URL}/api/admin/waitlists`);
+      const response = await fetch(`${API_URL}/api/admin/waitlists`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Waitlists fetched:', data);
         setWaitlists(data);
+      } else {
+        console.error('❌ Failed to fetch waitlists:', response.status);
       }
     } catch (err) {
+      console.error('❌ Error fetching waitlists:', err);
       setError('Failed to fetch waitlists');
     } finally {
       setLoading(false);
@@ -288,15 +318,19 @@ const AdminDashboard = ({ handleLogout }) => {
 
   const fetchCourseWaitlist = async (courseId) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/waitlist/course/${courseId}`, {
+      console.log('📥 Fetching course waitlist from:', `${API_URL}/api/admin/waitlist/course/${courseId}`);
+      const response = await fetch(`${API_URL}/api/admin/waitlist/course/${courseId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Course waitlist fetched:', data);
         setCourseWaitlists(prev => ({ ...prev, [courseId]: data }));
+      } else {
+        console.error('❌ Failed to fetch course waitlist:', response.status);
       }
     } catch (err) {
-      console.error('Failed to fetch course waitlist:', err);
+      console.error('❌ Failed to fetch course waitlist:', err);
     }
   };
 
@@ -304,12 +338,14 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Promote the next student from the waitlist for this course?')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/waitlist/promote/${courseId}`, {
+      console.log('📤 Promoting from waitlist:', `${API_URL}/api/admin/waitlist/promote/${courseId}`);
+      const response = await fetch(`${API_URL}/api/admin/waitlist/promote/${courseId}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
+        console.log('✅ Student promoted successfully');
         alert('Student promoted from waitlist successfully!');
         fetchAllWaitlists();
         fetchCourses();
@@ -317,6 +353,7 @@ const AdminDashboard = ({ handleLogout }) => {
         throw new Error('Failed to promote student');
       }
     } catch (err) {
+      console.error('❌ Error promoting student:', err);
       alert('Error promoting student: ' + err.message);
     }
   };
@@ -325,12 +362,14 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Process all waitlists system-wide? This will promote eligible students from all waitlists.')) return;
     
     try {
-      const response = await fetch('http://localhost:8080/api/admin/waitlist/process-all', {
+      console.log('📤 Processing all waitlists:', `${API_URL}/api/admin/waitlist/process-all`);
+      const response = await fetch(`${API_URL}/api/admin/waitlist/process-all`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
+        console.log('✅ All waitlists processed successfully');
         alert('All waitlists processed successfully!');
         fetchAllWaitlists();
         fetchCourses();
@@ -338,6 +377,7 @@ const AdminDashboard = ({ handleLogout }) => {
         throw new Error('Failed to process waitlists');
       }
     } catch (err) {
+      console.error('❌ Error processing waitlists:', err);
       alert('Error processing waitlists: ' + err.message);
     }
   };
@@ -346,18 +386,21 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Remove this student from the waitlist?')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/waitlist/${waitlistId}`, {
+      console.log('📤 Removing from waitlist:', `${API_URL}/api/admin/waitlist/${waitlistId}`);
+      const response = await fetch(`${API_URL}/api/admin/waitlist/${waitlistId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
+        console.log('✅ Student removed successfully');
         alert('Student removed from waitlist successfully!');
         fetchAllWaitlists();
       } else {
         throw new Error('Failed to remove student');
       }
     } catch (err) {
+      console.error('❌ Error removing student:', err);
       alert('Error removing student: ' + err.message);
     }
   };
@@ -365,7 +408,8 @@ const AdminDashboard = ({ handleLogout }) => {
   // Course CRUD operations
   const handleAddCourse = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/admin/courses', {
+      console.log('📤 Adding course to:', `${API_URL}/api/admin/courses`);
+      const response = await fetch(`${API_URL}/api/admin/courses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -375,6 +419,7 @@ const AdminDashboard = ({ handleLogout }) => {
       });
       
       if (response.ok) {
+        console.log('✅ Course added successfully');
         alert('Course added successfully!');
         setShowCourseModal(false);
         setCourseForm({
@@ -386,6 +431,7 @@ const AdminDashboard = ({ handleLogout }) => {
         throw new Error('Failed to add course');
       }
     } catch (err) {
+      console.error('❌ Error adding course:', err);
       alert('Error adding course: ' + err.message);
     }
   };
@@ -398,7 +444,8 @@ const AdminDashboard = ({ handleLogout }) => {
         endTime: formatTime(courseForm.endTime)
       };
       
-      const response = await fetch(`http://localhost:8080/api/admin/courses/${editingCourse.courseId}`, {
+      console.log('📤 Updating course:', `${API_URL}/api/admin/courses/${editingCourse.courseId}`);
+      const response = await fetch(`${API_URL}/api/admin/courses/${editingCourse.courseId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -408,15 +455,18 @@ const AdminDashboard = ({ handleLogout }) => {
       });
       
       if (response.ok) {
+        console.log('✅ Course updated successfully');
         alert('Course updated successfully!');
         setShowCourseModal(false);
         setEditingCourse(null);
         fetchCourses();
       } else {
         const errorText = await response.text();
+        console.error('❌ Failed to update course:', errorText);
         throw new Error(errorText || 'Failed to update course');
       }
     } catch (err) {
+      console.error('❌ Error updating course:', err);
       alert('Error updating course: ' + err.message);
     }
   };
@@ -425,18 +475,21 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Are you sure you want to delete this course?')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/courses/${courseId}`, {
+      console.log('📤 Deleting course:', `${API_URL}/api/admin/courses/${courseId}`);
+      const response = await fetch(`${API_URL}/api/admin/courses/${courseId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
+        console.log('✅ Course deleted successfully');
         alert('Course deleted successfully!');
         fetchCourses();
       } else {
         throw new Error('Failed to delete course');
       }
     } catch (err) {
+      console.error('❌ Error deleting course:', err);
       alert('Error deleting course: ' + err.message);
     }
   };
@@ -444,7 +497,8 @@ const AdminDashboard = ({ handleLogout }) => {
   // Student CRUD operations
   const handleAddStudent = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/admin/students', {
+      console.log('📤 Adding student to:', `${API_URL}/api/admin/students`);
+      const response = await fetch(`${API_URL}/api/admin/students`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -454,6 +508,7 @@ const AdminDashboard = ({ handleLogout }) => {
       });
       
       if (response.ok) {
+        console.log('✅ Student added successfully');
         alert('Student added successfully!');
         setShowStudentModal(false);
         setStudentForm({
@@ -464,13 +519,15 @@ const AdminDashboard = ({ handleLogout }) => {
         throw new Error('Failed to add student');
       }
     } catch (err) {
+      console.error('❌ Error adding student:', err);
       alert('Error adding student: ' + err.message);
     }
   };
 
   const handleUpdateStudent = async () => {
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/students/${editingStudent.studentId}`, {
+      console.log('📤 Updating student:', `${API_URL}/api/admin/students/${editingStudent.studentId}`);
+      const response = await fetch(`${API_URL}/api/admin/students/${editingStudent.studentId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -480,6 +537,7 @@ const AdminDashboard = ({ handleLogout }) => {
       });
       
       if (response.ok) {
+        console.log('✅ Student updated successfully');
         alert('Student updated successfully!');
         setShowStudentModal(false);
         setEditingStudent(null);
@@ -488,6 +546,7 @@ const AdminDashboard = ({ handleLogout }) => {
         throw new Error('Failed to update student');
       }
     } catch (err) {
+      console.error('❌ Error updating student:', err);
       alert('Error updating student: ' + err.message);
     }
   };
@@ -496,18 +555,21 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Are you sure you want to delete this student?')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/students/${studentId}`, {
+      console.log('📤 Deleting student:', `${API_URL}/api/admin/students/${studentId}`);
+      const response = await fetch(`${API_URL}/api/admin/students/${studentId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
+        console.log('✅ Student deleted successfully');
         alert('Student deleted successfully!');
         fetchStudents();
       } else {
         throw new Error('Failed to delete student');
       }
     } catch (err) {
+      console.error('❌ Error deleting student:', err);
       alert('Error deleting student: ' + err.message);
     }
   };
@@ -534,7 +596,8 @@ const AdminDashboard = ({ handleLogout }) => {
         endTime: formatForMySQL(roundForm.endTime)
       };
 
-      const response = await fetch('http://localhost:8080/api/admin/rounds', {
+      console.log('📤 Adding round to:', `${API_URL}/api/admin/rounds`);
+      const response = await fetch(`${API_URL}/api/admin/rounds`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -544,6 +607,7 @@ const AdminDashboard = ({ handleLogout }) => {
       });
       
       if (response.ok) {
+        console.log('✅ Round created successfully');
         alert('Round created successfully!');
         setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
         await fetchRounds(); // Wait for rounds to refresh
@@ -552,6 +616,7 @@ const AdminDashboard = ({ handleLogout }) => {
         throw new Error('Failed to create round');
       }
     } catch (err) {
+      console.error('❌ Error creating round:', err);
       alert('Error creating round: ' + err.message);
     }
   };
@@ -608,8 +673,9 @@ const AdminDashboard = ({ handleLogout }) => {
       };
       
       console.log('Final payload being sent:', JSON.stringify(roundData, null, 2));
+      console.log('📤 Updating round:', `${API_URL}/api/admin/rounds/${editingRound.roundId}`);
 
-      const response = await fetch(`http://localhost:8080/api/admin/rounds/${editingRound.roundId}`, {
+      const response = await fetch(`${API_URL}/api/admin/rounds/${editingRound.roundId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -621,6 +687,7 @@ const AdminDashboard = ({ handleLogout }) => {
       console.log('Response status:', response.status);
       
       if (response.ok) {
+        console.log('✅ Round updated successfully');
         alert('Round updated successfully!');
         setEditingRound(null);
         setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
@@ -651,12 +718,14 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Are you sure you want to delete this round?')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/rounds/${roundId}`, {
+      console.log('📤 Deleting round:', `${API_URL}/api/admin/rounds/${roundId}`);
+      const response = await fetch(`${API_URL}/api/admin/rounds/${roundId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
+        console.log('✅ Round deleted successfully');
         alert('Round deleted successfully!');
         if (selectedRound?.roundId === roundId) {
           setSelectedRound(null);
@@ -667,6 +736,7 @@ const AdminDashboard = ({ handleLogout }) => {
         throw new Error('Failed to delete round');
       }
     } catch (err) {
+      console.error('❌ Error deleting round:', err);
       alert('Error deleting round: ' + err.message);
     }
   };
@@ -708,20 +778,24 @@ const AdminDashboard = ({ handleLogout }) => {
     if (!window.confirm('Are you sure you want to publish results for this round? This will:\n- Assign courses to highest bidders\n- Refund points to unsuccessful bidders\n- This action cannot be undone.')) return;
     
     try {
-      const response = await fetch(`http://localhost:8080/api/rounds/${roundId}/publish`, {
+      console.log('📤 Publishing results for round:', `${API_URL}/api/rounds/${roundId}/publish`);
+      const response = await fetch(`${API_URL}/api/rounds/${roundId}/publish`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
+        console.log('✅ Results published successfully');
         alert('Results published successfully! Courses assigned and points refunded.');
         await fetchRounds(); // Wait for rounds to refresh
         await fetchBids(); // Wait for bids to refresh
       } else {
         const errorText = await response.text();
+        console.error('❌ Failed to publish results:', errorText);
         throw new Error(errorText || 'Failed to publish results');
       }
     } catch (err) {
+      console.error('❌ Error publishing results:', err);
       alert('Error publishing results: ' + err.message);
     }
   };
@@ -907,7 +981,8 @@ const AdminDashboard = ({ handleLogout }) => {
             {loading ? (
               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading courses...</p>
+                <p className="text-gray-600">Loading courses from Railway...</p>
+                <p className="text-gray-400 text-sm mt-2">{API_URL}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4">
@@ -1057,7 +1132,8 @@ const AdminDashboard = ({ handleLogout }) => {
             {loading ? (
               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading students...</p>
+                <p className="text-gray-600">Loading students from Railway...</p>
+                <p className="text-gray-400 text-sm mt-2">{API_URL}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1155,7 +1231,8 @@ const AdminDashboard = ({ handleLogout }) => {
             {loading ? (
               <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading rounds...</p>
+                <p className="text-gray-600">Loading rounds from Railway...</p>
+                <p className="text-gray-400 text-sm mt-2">{API_URL}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
