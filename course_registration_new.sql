@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Nov 24, 2025 at 04:06 AM
+-- Generation Time: Nov 25, 2025 at 06:10 AM
 -- Server version: 10.4.28-MariaDB
 -- PHP Version: 8.2.4
 
@@ -72,6 +72,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `process_auction_winners` (IN `p_rou
     DECLARE v_bid_amount INT;
     DECLARE v_created_at TIMESTAMP;
     DECLARE v_rank INT DEFAULT 0;
+    DECLARE v_winners_count INT DEFAULT 0;
     DECLARE done INT DEFAULT FALSE;
     
     DECLARE bid_cursor CURSOR FOR
@@ -84,6 +85,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `process_auction_winners` (IN `p_rou
     
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
     
+    -- Get current course capacity and enrollment
     SELECT capacity, COALESCE(enrolled, 0)
     INTO v_capacity, v_enrolled
     FROM course
@@ -91,15 +93,19 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `process_auction_winners` (IN `p_rou
     
     SET v_available_seats = v_capacity - v_enrolled;
     
+    -- If no seats available, all bids become lost and go to waitlist
     IF v_available_seats <= 0 THEN
+        -- Mark all bids as lost
         UPDATE bid SET status = 'lost'
         WHERE round_id = p_round_id AND course_id = p_course_id AND status = 'pending';
         
+        -- Refund bid amounts to wallets
         UPDATE wallet w
         INNER JOIN bid b ON w.student_id = b.student_id
         SET w.balance = w.balance + b.bid_amount
         WHERE b.round_id = p_round_id AND b.course_id = p_course_id AND b.status = 'lost';
         
+        -- Add all losing bidders to waitlist based on bid amount
         SET @waitlist_position = 0;
         INSERT INTO waitlist (student_id, course_id, position, created_at)
         SELECT b.student_id, b.course_id,
@@ -110,6 +116,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `process_auction_winners` (IN `p_rou
         ON DUPLICATE KEY UPDATE position = VALUES(position);
         
     ELSE
+        -- Process bids one by one
         OPEN bid_cursor;
         
         bid_loop: LOOP
@@ -117,20 +124,30 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `process_auction_winners` (IN `p_rou
             IF done THEN LEAVE bid_loop; END IF;
             SET v_rank = v_rank + 1;
             
+            -- Winner: has a seat available
             IF v_rank <= v_available_seats THEN
+                -- Mark bid as won
                 UPDATE bid SET status = 'won' WHERE bid_id = v_bid_id;
                 
+                -- Create enrollment if doesn't exist
                 IF NOT EXISTS (SELECT 1 FROM enrollment 
                               WHERE student_id = v_student_id AND course_id = p_course_id) THEN
                     INSERT INTO enrollment (student_id, course_id, round_id, bid_id, enrollment_date)
                     VALUES (v_student_id, p_course_id, p_round_id, v_bid_id, NOW());
                     
-                    UPDATE course SET enrolled = enrolled + 1 WHERE course_id = p_course_id;
+                    -- Increment winners count (we'll update enrolled in one go later)
+                    SET v_winners_count = v_winners_count + 1;
                 END IF;
+                
+            -- Loser: no seat available
             ELSE
+                -- Mark bid as lost
                 UPDATE bid SET status = 'lost' WHERE bid_id = v_bid_id;
+                
+                -- Refund bid amount
                 UPDATE wallet SET balance = balance + v_bid_amount WHERE student_id = v_student_id;
                 
+                -- Add to waitlist if not already there
                 IF NOT EXISTS (SELECT 1 FROM waitlist 
                               WHERE student_id = v_student_id AND course_id = p_course_id) THEN
                     INSERT INTO waitlist (student_id, course_id, position, created_at)
@@ -140,6 +157,14 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `process_auction_winners` (IN `p_rou
         END LOOP bid_loop;
         
         CLOSE bid_cursor;
+        
+        -- Update enrolled count ONCE with the total number of new enrollments
+        -- This prevents exceeding capacity
+        IF v_winners_count > 0 THEN
+            UPDATE course 
+            SET enrolled = LEAST(v_enrolled + v_winners_count, capacity)
+            WHERE course_id = p_course_id;
+        END IF;
     END IF;
 END$$
 
@@ -162,7 +187,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `process_round_bids` (IN `p_round_id
     END IF;
     
     -- Can process if status is 'completed'
-    IF v_status = 'completed' THEN
+    IF v_status = 'closed' THEN
         SET v_can_process = TRUE;
     END IF;
     
@@ -403,10 +428,10 @@ CREATE TABLE `bid` (
 --
 
 INSERT INTO `bid` (`bid_id`, `student_id`, `course_id`, `round_id`, `bid_amount`, `status`, `priority`, `created_at`, `updated_at`) VALUES
-(20, 2, 14, 12, 30, 'won', 0, '2025-11-24 02:02:40', '2025-11-24 02:10:21'),
-(21, 2, 4, 12, 30, 'won', 0, '2025-11-24 02:02:40', '2025-11-24 02:10:21'),
-(22, 3, 10, 12, 20, 'won', 0, '2025-11-24 02:03:43', '2025-11-24 02:10:21'),
-(23, 3, 3, 12, 20, 'won', 0, '2025-11-24 02:03:43', '2025-11-24 02:10:21');
+(24, 1, 18, 16, 40, 'won', 0, '2025-11-25 04:02:25', '2025-11-25 04:14:30'),
+(25, 2, 18, 16, 35, 'won', 0, '2025-11-25 04:03:01', '2025-11-25 04:14:30'),
+(26, 3, 18, 16, 40, 'won', 0, '2025-11-25 04:03:43', '2025-11-25 04:14:30'),
+(27, 7, 18, 16, 20, 'lost', 0, '2025-11-25 04:04:43', '2025-11-25 04:14:30');
 
 -- --------------------------------------------------------
 
@@ -438,17 +463,18 @@ INSERT INTO `course` (`course_id`, `course_code`, `course_name`, `dept_id`, `ins
 (1, 'CS101', 'Introduction to Programming', 6, 'Dr. Emily Chen', 3, 45, 0, 15, 'Learn programming fundamentals with Java', 'C++', '2025-11-19 05:03:04', '2025-11-19 23:34:26'),
 (2, 'CS201', 'Data Structures and Algorithms', 1, 'Prof. Michael Zhang', 4, 25, 0, 15, 'Advanced data structures and algorithm analysis', NULL, '2025-11-19 05:03:04', '2025-11-19 05:03:04'),
 (3, 'CS301', 'Database Systems', 1, 'Dr. Sarah Williams', 3, 20, 2, 20, 'Relational databases, SQL, and design', NULL, '2025-11-19 05:03:04', '2025-11-24 02:10:21'),
-(4, 'CS401', 'Machine Learning', 1, 'Prof. David Kumar', 4, 15, 2, 30, 'Introduction to ML algorithms and applications', NULL, '2025-11-19 05:03:04', '2025-11-24 02:10:21'),
+(4, 'CS401', 'Machine Learning', 1, 'Prof. David Kumar', 4, 15, 0, 30, 'Introduction to ML algorithms and applications', NULL, '2025-11-19 05:03:04', '2025-11-24 04:31:49'),
 (5, 'EE202', 'Circuit Analysis', 2, 'Dr. Robert Taylor', 4, 25, 0, 12, 'Fundamental circuit analysis techniques', NULL, '2025-11-19 05:03:04', '2025-11-19 05:03:04'),
 (6, 'EE305', 'Digital Signal Processing', 2, 'Prof. Lisa Anderson', 3, 20, 0, 18, 'Digital signal processing fundamentals', NULL, '2025-11-19 05:03:04', '2025-11-19 05:03:04'),
 (7, 'ME210', 'Thermodynamics', 3, 'Dr. James Wilson', 3, 30, 0, 10, 'Basic thermodynamics principles', NULL, '2025-11-19 05:03:04', '2025-11-19 05:03:04'),
 (8, 'MATH301', 'Linear Algebra', 4, 'Prof. Anna Martinez', 3, 35, 0, 8, 'Matrices, vector spaces, and transformations', NULL, '2025-11-19 05:03:04', '2025-11-19 05:03:04'),
 (9, 'PHYS201', 'Quantum Mechanics I', 5, 'Dr. Richard Feynman', 4, 20, 0, 25, 'Introduction to quantum mechanics', NULL, '2025-11-19 05:03:04', '2025-11-19 05:03:04'),
 (10, 'BA302', 'Corporate Finance New', 6, 'Prof. Warren Buffett Sr', 4, 9, 4, 20, 'Financial management and analysis and trading', 'MATH and Eco', '2025-11-19 05:03:04', '2025-11-24 02:10:21'),
-(14, 'BA706', 'DBMS', 1, 'Shreyas Kaldate', 3, 28, 3, 20, 'He is king DB , take his course', 'Basics of SQL', '2025-11-19 18:45:27', '2025-11-24 02:10:21'),
+(14, 'BA706', 'DBMS', 1, 'Shreyas Kaldate', 3, 28, 1, 20, 'He is king DB , take his course', 'Basics of SQL', '2025-11-19 18:45:27', '2025-11-24 04:42:45'),
 (15, 'CS101', 'Intro to Java', 1, 'Bhagyashri Patil', 3, 1, 1, 10, 'She is Queen of Java, take her course', '', '2025-11-20 14:10:47', '2025-11-20 16:03:17'),
 (16, 'CS3310', 'Cloud Computing', 1, 'Prof Sambit Sahu', 3, 30, 0, 20, NULL, NULL, '2025-11-23 18:54:59', '2025-11-23 18:54:59'),
-(17, 'CS3310', 'Cloud Computing', 1, 'Prof Sambit Sahu', 3, 30, 0, 20, NULL, NULL, '2025-11-23 18:55:31', '2025-11-23 18:55:31');
+(17, 'CS3310', 'Cloud Computing', 1, 'Prof Sambit Sahu', 3, 30, 0, 20, NULL, NULL, '2025-11-23 18:55:31', '2025-11-23 18:55:31'),
+(18, 'CSTT', 'Test Course ', 1, 'Vikram Markali', 3, 3, 3, 20, NULL, 'NA', '2025-11-25 03:59:55', '2025-11-25 04:14:30');
 
 -- --------------------------------------------------------
 
@@ -489,7 +515,8 @@ INSERT INTO `course_schedule` (`schedule_id`, `course_id`, `day_of_week`, `start
 (24, 10, 'Monday', '09:00:00', '12:00:00', 'Room 305'),
 (27, 15, 'Friday', '12:10:00', '14:10:00', 'Room 302'),
 (28, 14, 'Wednesday', '14:30:00', '17:00:00', 'Room 211, 2 MetroTech'),
-(29, 17, 'Tuesday', '17:00:00', '19:30:00', 'Room 315 6 Mt');
+(29, 17, 'Tuesday', '17:00:00', '19:30:00', 'Room 315 6 Mt'),
+(30, 18, 'Wednesday', '10:00:00', '11:30:00', 'Test Room');
 
 -- --------------------------------------------------------
 
@@ -537,10 +564,9 @@ CREATE TABLE `enrollment` (
 --
 
 INSERT INTO `enrollment` (`enrollment_id`, `student_id`, `course_id`, `round_id`, `bid_id`, `enrollment_date`, `grade`) VALUES
-(8, 3, 3, 12, 23, '2025-11-24 02:10:21', NULL),
-(9, 2, 4, 12, 21, '2025-11-24 02:10:21', NULL),
-(10, 3, 10, 12, 22, '2025-11-24 02:10:21', NULL),
-(11, 2, 14, 12, 20, '2025-11-24 02:10:21', NULL);
+(14, 1, 18, 16, 24, '2025-11-25 04:14:30', NULL),
+(15, 3, 18, 16, 26, '2025-11-25 04:14:30', NULL),
+(16, 2, 18, 16, 25, '2025-11-25 04:14:30', NULL);
 
 --
 -- Triggers `enrollment`
@@ -988,7 +1014,7 @@ INSERT INTO `notification` (`notification_id`, `student_id`, `title`, `message`,
 (425, 15, 'New Course Added', 'Course Cloud Computing has been added.', 'info', 0, NULL, NULL, '2025-11-23 18:55:31'),
 (426, NULL, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:47:32'),
 (427, 1, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:47:32'),
-(428, 2, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:47:32');
+(428, 2, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 1, NULL, NULL, '2025-11-24 01:47:32');
 INSERT INTO `notification` (`notification_id`, `student_id`, `title`, `message`, `type`, `is_read`, `related_bid_id`, `related_course_id`, `created_at`) VALUES
 (429, 3, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:47:32'),
 (430, 4, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:47:32'),
@@ -998,7 +1024,7 @@ INSERT INTO `notification` (`notification_id`, `student_id`, `title`, `message`,
 (434, 15, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:47:32'),
 (435, NULL, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:50:07'),
 (436, 1, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:50:07'),
-(437, 2, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:50:07'),
+(437, 2, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 1, NULL, NULL, '2025-11-24 01:50:07'),
 (438, 3, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:50:07'),
 (439, 4, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:50:07'),
 (440, 5, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:50:07'),
@@ -1007,26 +1033,264 @@ INSERT INTO `notification` (`notification_id`, `student_id`, `title`, `message`,
 (443, 15, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 01:50:07'),
 (444, NULL, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 02:00:47'),
 (445, 1, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 02:00:47'),
-(446, 2, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 02:00:47'),
+(446, 2, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 1, NULL, NULL, '2025-11-24 02:00:47'),
 (447, 3, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 02:00:47'),
 (448, 4, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 02:00:47'),
 (449, 5, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 02:00:47'),
 (450, 7, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 02:00:47'),
 (451, 8, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 02:00:47'),
 (452, 15, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-24 02:00:47'),
-(453, 3, '🎉 Bid Won!', 'Congratulations! You won your bid for Corporate Finance New with 20 points. The course has been added to your enrollment.', 'bid_result', 0, 22, 10, '2025-11-24 02:10:21'),
-(454, 3, '🎉 Bid Won!', 'Congratulations! You won your bid for Database Systems with 20 points. The course has been added to your enrollment.', 'bid_result', 0, 23, 3, '2025-11-24 02:10:21'),
-(455, 2, '🎉 Bid Won!', 'Congratulations! You won your bid for DBMS with 30 points. The course has been added to your enrollment.', 'bid_result', 0, 20, 14, '2025-11-24 02:10:21'),
-(456, 2, '🎉 Bid Won!', 'Congratulations! You won your bid for Machine Learning with 30 points. The course has been added to your enrollment.', 'bid_result', 0, 21, 4, '2025-11-24 02:10:21'),
+(453, 3, '🎉 Bid Won!', 'Congratulations! You won your bid for Corporate Finance New with 20 points. The course has been added to your enrollment.', 'bid_result', 0, NULL, 10, '2025-11-24 02:10:21'),
+(454, 3, '🎉 Bid Won!', 'Congratulations! You won your bid for Database Systems with 20 points. The course has been added to your enrollment.', 'bid_result', 0, NULL, 3, '2025-11-24 02:10:21'),
+(455, 2, '🎉 Bid Won!', 'Congratulations! You won your bid for DBMS with 30 points. The course has been added to your enrollment.', 'bid_result', 1, NULL, 14, '2025-11-24 02:10:21'),
+(456, 2, '🎉 Bid Won!', 'Congratulations! You won your bid for Machine Learning with 30 points. The course has been added to your enrollment.', 'bid_result', 1, NULL, 4, '2025-11-24 02:10:21'),
 (457, NULL, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21'),
 (458, 1, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21'),
-(459, 2, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21'),
+(459, 2, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 1, NULL, NULL, '2025-11-24 02:10:21'),
 (460, 3, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21'),
 (461, 4, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21'),
 (462, 5, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21'),
 (463, 7, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21'),
 (464, 8, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21'),
-(465, 15, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21');
+(465, 15, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-24 02:10:21'),
+(466, NULL, 'Waitlist Update', 'A seat has opened up in Machine Learning. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:31:49'),
+(467, 1, 'Waitlist Update', 'A seat has opened up in Machine Learning. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:31:49'),
+(468, 2, 'Waitlist Update', 'A seat has opened up in Machine Learning. Eligible students have been automatically enrolled from the waitlist.', 'info', 1, NULL, NULL, '2025-11-24 04:31:49'),
+(469, 3, 'Waitlist Update', 'A seat has opened up in Machine Learning. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:31:49'),
+(470, 4, 'Waitlist Update', 'A seat has opened up in Machine Learning. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:31:49'),
+(471, 5, 'Waitlist Update', 'A seat has opened up in Machine Learning. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:31:49'),
+(472, 7, 'Waitlist Update', 'A seat has opened up in Machine Learning. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:31:49'),
+(473, 8, 'Waitlist Update', 'A seat has opened up in Machine Learning. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:31:49'),
+(474, 15, 'Waitlist Update', 'A seat has opened up in Machine Learning. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:31:49'),
+(475, NULL, 'Waitlist Update', 'A seat has opened up in DBMS. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:42:45'),
+(476, 1, 'Waitlist Update', 'A seat has opened up in DBMS. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:42:45'),
+(477, 2, 'Waitlist Update', 'A seat has opened up in DBMS. Eligible students have been automatically enrolled from the waitlist.', 'info', 1, NULL, NULL, '2025-11-24 04:42:45'),
+(478, 3, 'Waitlist Update', 'A seat has opened up in DBMS. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:42:45'),
+(479, 4, 'Waitlist Update', 'A seat has opened up in DBMS. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:42:45'),
+(480, 5, 'Waitlist Update', 'A seat has opened up in DBMS. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:42:45'),
+(481, 7, 'Waitlist Update', 'A seat has opened up in DBMS. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:42:45'),
+(482, 8, 'Waitlist Update', 'A seat has opened up in DBMS. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:42:45'),
+(483, 15, 'Waitlist Update', 'A seat has opened up in DBMS. Eligible students have been automatically enrolled from the waitlist.', 'info', 0, NULL, NULL, '2025-11-24 04:42:45'),
+(484, NULL, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:36:46'),
+(485, 1, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:36:46'),
+(486, 2, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:36:46'),
+(487, 3, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:36:46'),
+(488, 4, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:36:46'),
+(489, 5, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:36:46'),
+(490, 7, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:36:46'),
+(491, 8, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:36:46'),
+(492, 15, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:36:46'),
+(493, NULL, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:43:40'),
+(494, 1, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:43:40'),
+(495, 2, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:43:40'),
+(496, 3, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:43:40'),
+(497, 4, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:43:40'),
+(498, 5, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:43:40'),
+(499, 7, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:43:40'),
+(500, 8, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:43:40'),
+(501, 15, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:43:40'),
+(502, NULL, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:55:29'),
+(503, 1, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:55:29'),
+(504, 2, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:55:29'),
+(505, 3, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:55:29'),
+(506, 4, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:55:29'),
+(507, 5, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:55:29'),
+(508, 7, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:55:29'),
+(509, 8, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:55:29'),
+(510, 15, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:55:29'),
+(511, NULL, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:58:20'),
+(512, 1, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:58:20'),
+(513, 2, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:58:20'),
+(514, 3, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:58:20'),
+(515, 4, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:58:20'),
+(516, 5, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:58:20'),
+(517, 7, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:58:20'),
+(518, 8, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:58:20'),
+(519, 15, 'New Bidding Round Created', 'Round 1 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 03:58:20'),
+(520, NULL, 'New Course Available', 'Course Test Course  (CSTT) has been added to the catalog.', 'info', 0, NULL, NULL, '2025-11-25 03:59:55'),
+(521, 1, 'New Course Available', 'Course Test Course  (CSTT) has been added to the catalog.', 'info', 0, NULL, NULL, '2025-11-25 03:59:55'),
+(522, 2, 'New Course Available', 'Course Test Course  (CSTT) has been added to the catalog.', 'info', 0, NULL, NULL, '2025-11-25 03:59:55'),
+(523, 3, 'New Course Available', 'Course Test Course  (CSTT) has been added to the catalog.', 'info', 0, NULL, NULL, '2025-11-25 03:59:55'),
+(524, 4, 'New Course Available', 'Course Test Course  (CSTT) has been added to the catalog.', 'info', 0, NULL, NULL, '2025-11-25 03:59:55'),
+(525, 5, 'New Course Available', 'Course Test Course  (CSTT) has been added to the catalog.', 'info', 0, NULL, NULL, '2025-11-25 03:59:55'),
+(526, 7, 'New Course Available', 'Course Test Course  (CSTT) has been added to the catalog.', 'info', 0, NULL, NULL, '2025-11-25 03:59:55'),
+(527, 8, 'New Course Available', 'Course Test Course  (CSTT) has been added to the catalog.', 'info', 0, NULL, NULL, '2025-11-25 03:59:55'),
+(528, 15, 'New Course Available', 'Course Test Course  (CSTT) has been added to the catalog.', 'info', 0, NULL, NULL, '2025-11-25 03:59:55'),
+(529, 7, '❌ Bid Not Successful', 'Unfortunately, your bid for Test Course  (20 points) was not successful. Your 20 points have been refunded to your wallet.', 'bid_result', 0, 27, 18, '2025-11-25 04:14:30'),
+(530, 3, '🎉 Bid Won!', 'Congratulations! You won your bid for Test Course  with 40 points. The course has been added to your enrollment.', 'bid_result', 0, 26, 18, '2025-11-25 04:14:30'),
+(531, 2, '🎉 Bid Won!', 'Congratulations! You won your bid for Test Course  with 35 points. The course has been added to your enrollment.', 'bid_result', 0, 25, 18, '2025-11-25 04:14:30'),
+(532, 1, '🎉 Bid Won!', 'Congratulations! You won your bid for Test Course  with 40 points. The course has been added to your enrollment.', 'bid_result', 0, 24, 18, '2025-11-25 04:14:30'),
+(533, NULL, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:14:30'),
+(534, 1, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:14:30'),
+(535, 2, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:14:30'),
+(536, 3, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:14:30'),
+(537, 4, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:14:30'),
+(538, 5, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:14:30'),
+(539, 7, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:14:30'),
+(540, 8, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:14:30'),
+(541, 15, 'Round Processed: Round 1', 'Round 1 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:14:30'),
+(542, NULL, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:17:59'),
+(543, 1, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:17:59'),
+(544, 2, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:17:59'),
+(545, 3, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:17:59'),
+(546, 4, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:17:59'),
+(547, 5, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:17:59'),
+(548, 7, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:17:59'),
+(549, 8, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:17:59'),
+(550, 15, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:17:59'),
+(551, NULL, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:36:24'),
+(552, 1, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:36:24'),
+(553, 2, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:36:24'),
+(554, 3, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:36:24'),
+(555, 4, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:36:24'),
+(556, 5, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:36:24'),
+(557, 7, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:36:24'),
+(558, 8, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:36:24'),
+(559, 15, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:36:24'),
+(560, NULL, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(561, 1, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(562, 2, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(563, 3, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(564, 4, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(565, 5, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(566, 7, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(567, 8, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(568, 15, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(569, NULL, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(570, 1, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(571, 2, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(572, 3, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(573, 4, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(574, 5, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(575, 7, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(576, 8, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(577, 15, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:46:15'),
+(578, NULL, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:46:36'),
+(579, 1, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:46:36'),
+(580, 2, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:46:36'),
+(581, 3, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:46:36'),
+(582, 4, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:46:36'),
+(583, 5, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:46:36'),
+(584, 7, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:46:36'),
+(585, 8, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:46:36'),
+(586, 15, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:46:36'),
+(587, NULL, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:47:37'),
+(588, 1, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:47:37'),
+(589, 2, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:47:37'),
+(590, 3, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:47:37'),
+(591, 4, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:47:37'),
+(592, 5, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:47:37'),
+(593, 7, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:47:37'),
+(594, 8, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:47:37'),
+(595, 15, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:47:37'),
+(596, NULL, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:48:15'),
+(597, 1, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:48:15'),
+(598, 2, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:48:15'),
+(599, 3, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:48:15'),
+(600, 4, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:48:15'),
+(601, 5, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:48:15'),
+(602, 7, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:48:15'),
+(603, 8, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:48:15'),
+(604, 15, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:48:15'),
+(605, NULL, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:54:57'),
+(606, 1, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:54:57'),
+(607, 2, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:54:57'),
+(608, 3, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:54:57'),
+(609, 4, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:54:57'),
+(610, 5, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:54:57'),
+(611, 7, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:54:57'),
+(612, 8, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:54:57'),
+(613, 15, 'Round Processed: Round 2', 'Round 2 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:54:57'),
+(614, NULL, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:55:20'),
+(615, 1, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:55:20'),
+(616, 2, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:55:20'),
+(617, 3, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:55:20'),
+(618, 4, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:55:20'),
+(619, 5, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:55:20'),
+(620, 7, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:55:20'),
+(621, 8, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:55:20'),
+(622, 15, 'New Bidding Round Created', 'Round 3 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:55:20'),
+(623, NULL, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:56:38'),
+(624, 1, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:56:38'),
+(625, 2, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:56:38'),
+(626, 3, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:56:38'),
+(627, 4, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:56:38'),
+(628, 5, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:56:38'),
+(629, 7, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:56:38'),
+(630, 8, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:56:38'),
+(631, 15, '⏱️ Round Closed: Round 3', 'Bidding has ended for Round 3. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:56:38'),
+(632, NULL, 'Round Processed: Round 3', 'Round 3 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:57:13'),
+(633, 1, 'Round Processed: Round 3', 'Round 3 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:57:13'),
+(634, 2, 'Round Processed: Round 3', 'Round 3 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:57:13'),
+(635, 3, 'Round Processed: Round 3', 'Round 3 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:57:13'),
+(636, 4, 'Round Processed: Round 3', 'Round 3 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:57:13'),
+(637, 5, 'Round Processed: Round 3', 'Round 3 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:57:13'),
+(638, 7, 'Round Processed: Round 3', 'Round 3 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:57:13'),
+(639, 8, 'Round Processed: Round 3', 'Round 3 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:57:13'),
+(640, 15, 'Round Processed: Round 3', 'Round 3 has been processed. Check your bids to see the results!', 'info', 0, NULL, NULL, '2025-11-25 04:57:13'),
+(641, NULL, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:57:48'),
+(642, 1, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:57:48'),
+(643, 2, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:57:48'),
+(644, 3, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:57:48'),
+(645, 4, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:57:48'),
+(646, 5, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:57:48'),
+(647, 7, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:57:48'),
+(648, 8, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:57:48'),
+(649, 15, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 04:57:48'),
+(650, NULL, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:58:38'),
+(651, 1, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:58:38'),
+(652, 2, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:58:38'),
+(653, 3, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:58:38'),
+(654, 4, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:58:38'),
+(655, 5, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:58:38'),
+(656, 7, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:58:38'),
+(657, 8, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:58:38'),
+(658, 15, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:58:38'),
+(659, NULL, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:59:38'),
+(660, 1, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:59:38'),
+(661, 2, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:59:38'),
+(662, 3, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:59:38'),
+(663, 4, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:59:38'),
+(664, 5, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:59:38'),
+(665, 7, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:59:38'),
+(666, 8, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:59:38'),
+(667, 15, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 04:59:38'),
+(668, NULL, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:09'),
+(669, 1, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:09'),
+(670, 2, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:09'),
+(671, 3, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:09'),
+(672, 4, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:09'),
+(673, 5, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:09'),
+(674, 7, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:09'),
+(675, 8, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:09'),
+(676, 15, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:09'),
+(677, NULL, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:52'),
+(678, 1, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:52'),
+(679, 2, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:52'),
+(680, 3, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:52'),
+(681, 4, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:52'),
+(682, 5, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:52'),
+(683, 7, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:52'),
+(684, 8, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:52'),
+(685, 15, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:00:52'),
+(686, NULL, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 05:03:38'),
+(687, 1, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 05:03:38'),
+(688, 2, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 05:03:38'),
+(689, 3, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 05:03:38'),
+(690, 4, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 05:03:38'),
+(691, 5, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 05:03:38'),
+(692, 7, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 05:03:38'),
+(693, 8, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 05:03:38'),
+(694, 15, '⏱️ Round Closed: Round 2', 'Bidding has ended for Round 2. Results will be published soon by the admin.', 'info', 0, NULL, NULL, '2025-11-25 05:03:38'),
+(695, NULL, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:06:47'),
+(696, 1, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:06:47'),
+(697, 2, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:06:47'),
+(698, 3, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:06:47'),
+(699, 4, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:06:47'),
+(700, 5, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:06:47'),
+(701, 7, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:06:47'),
+(702, 8, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:06:47'),
+(703, 15, 'New Bidding Round Created', 'Round 2 has been scheduled. Get ready to place your bids!', 'info', 0, NULL, NULL, '2025-11-25 05:06:47');
 
 -- --------------------------------------------------------
 
@@ -1051,7 +1315,8 @@ CREATE TABLE `round` (
 --
 
 INSERT INTO `round` (`round_id`, `round_number`, `round_name`, `start_time`, `end_time`, `status`, `processed_at`, `created_at`, `updated_at`) VALUES
-(12, 1, 'Round 1', '2025-11-24 02:10:21', '2025-11-24 02:00:00', 'closed', '2025-11-24 02:10:21', '2025-11-24 02:00:47', '2025-11-24 02:10:21');
+(16, 1, 'Round 1', '2025-11-25 04:14:30', '2025-11-24 09:00:00', 'closed', '2025-11-25 04:14:30', '2025-11-25 03:58:20', '2025-11-25 04:14:30'),
+(24, 2, 'Round 2', '2025-11-24 10:06:00', '2025-11-25 21:10:00', 'active', NULL, '2025-11-25 05:06:47', '2025-11-25 05:07:34');
 
 -- --------------------------------------------------------
 
@@ -1079,9 +1344,9 @@ INSERT INTO `student` (`student_id`, `name`, `email`, `password`, `role`, `year`
 (1, 'Alice Johnson', 'alice@nyu.edu', '$2a$10$4wYaugyfKsmIhTTC948qv.wq7trmx7XzmDiCyeoWmH2b7ALKgefD.', 'student', 3, 2, '2025-11-19 05:03:04', '2025-11-19 19:27:30'),
 (2, 'Bob Smith', 'bob@nyu.edu', '$2a$10$IOGlEzHw8rcWufhTC8DCdOCHpItozXPvGTZ7BEvTo9z0ylcu2aOd2', 'student', 4, 1, '2025-11-19 05:03:04', '2025-11-23 17:21:40'),
 (3, 'Charlie Davis', 'charlie@nyu.edu', '$2a$10$wQymeU60g2fIMSd2wQtVZuGLQ6OuKQHt8TWki2nAYYIVAfG//fQOK', 'student', 4, 2, '2025-11-19 05:03:04', '2025-11-23 17:21:52'),
-(4, 'Diana Prince', 'diana@nyu.edu', '$2a$10$bQXHqATHQEldRa2ot3cF5.LuoB8sPzpvtdvAv2GKKtgzbQWZyhRXW', 'student', 1, 3, '2025-11-19 05:03:04', '2025-11-23 17:22:00'),
+(4, 'Diana Prince', 'diana@nyu.edu', '$2a$10$4sqqxyGwi8K7d3efDCF4ueOICCbfzcg2z39FtCtvZihN2B0KRKCp2', 'student', 1, 3, '2025-11-19 05:03:04', '2025-11-25 04:00:18'),
 (5, 'Admin User', 'admin@nyu.edu', '$2a$10$AMSapcIwO7l79aJvP.ed3uS2ccvUqXBe64xkTPSGVu7cc5FwRMoLa', 'admin', NULL, NULL, '2025-11-19 05:03:04', '2025-11-19 14:32:08'),
-(7, 'John Cena Sr', 'john123@wwe.com', '$2a$10$MvwUo3HUpBZAryrzLDYSt.bDU65vKQ/sEkkRpShtBD22hxcdHJwWy', 'student', 1, 3, '2025-11-19 14:31:29', '2025-11-23 17:22:09'),
+(7, 'John Cena Sr', 'john123@wwe.com', '$2a$10$Ng8gMlE58l9PdS2BSMsd0.R/k5fn.5TCrODpP/Kh9uvTQmCDQPNvW', 'student', 1, 3, '2025-11-19 14:31:29', '2025-11-25 04:00:28'),
 (8, 'TempAdmin', 'tempadmin@nyu.edu', '$2a$10$AMSapcIwO7l79aJvP.ed3uS2ccvUqXBe64xkTPSGVu7cc5FwRMoLa', 'admin', 1, 1, '2025-11-19 14:31:39', '2025-11-19 14:31:39'),
 (15, 'Dev Salvi', 'dev@nyu.edu', '$2a$10$8djau4jT8czwrIQwIAO7ZO8.qoOIQvChmuXhOquyLAA4qFPbKynFG', 'student', 1, 6, '2025-11-20 14:41:39', '2025-11-23 17:22:50');
 
@@ -1112,6 +1377,13 @@ CREATE TABLE `waitlist` (
   `created_at` timestamp NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `waitlist`
+--
+
+INSERT INTO `waitlist` (`waitlist_id`, `student_id`, `course_id`, `position`, `created_at`) VALUES
+(2, 7, 18, 1, '2025-11-25 04:14:30');
+
 -- --------------------------------------------------------
 
 --
@@ -1132,11 +1404,11 @@ CREATE TABLE `wallet` (
 --
 
 INSERT INTO `wallet` (`wallet_id`, `student_id`, `balance`, `total_spent`, `created_at`, `updated_at`) VALUES
-(1, 1, 13, 367, '2025-11-19 05:03:04', '2025-11-23 19:20:12'),
-(2, 2, 5, 95, '2025-11-19 05:03:04', '2025-11-24 02:02:40'),
-(3, 3, 0, 100, '2025-11-19 05:03:04', '2025-11-24 02:03:43'),
+(1, 1, 60, 407, '2025-11-19 05:03:04', '2025-11-25 04:02:25'),
+(2, 2, 65, 130, '2025-11-19 05:03:04', '2025-11-25 04:03:01'),
+(3, 3, 60, 140, '2025-11-19 05:03:04', '2025-11-25 04:03:43'),
 (4, 4, 100, 0, '2025-11-19 05:03:04', '2025-11-19 05:03:04'),
-(6, 7, 100, 0, '2025-11-19 14:31:29', '2025-11-19 14:31:29'),
+(6, 7, 100, 20, '2025-11-19 14:31:29', '2025-11-25 04:14:30'),
 (11, 15, 75, 25, '2025-11-20 14:41:39', '2025-11-20 14:43:48');
 
 --
@@ -1281,7 +1553,7 @@ ALTER TABLE `department`
 -- AUTO_INCREMENT for table `enrollment`
 --
 ALTER TABLE `enrollment`
-  MODIFY `enrollment_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `enrollment_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
 
 --
 -- AUTO_INCREMENT for table `Instructor`
@@ -1311,7 +1583,7 @@ ALTER TABLE `student`
 -- AUTO_INCREMENT for table `waitlist`
 --
 ALTER TABLE `waitlist`
-  MODIFY `waitlist_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `waitlist_id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `wallet`
