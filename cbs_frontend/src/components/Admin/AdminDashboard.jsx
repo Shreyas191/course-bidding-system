@@ -545,9 +545,9 @@ const AdminDashboard = ({ handleLogout }) => {
       
       if (response.ok) {
         alert('Round created successfully!');
-        setShowRoundModal(false);
         setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
-        fetchRounds();
+        await fetchRounds(); // Wait for rounds to refresh
+        setShowRoundModal(false); // Close modal after refresh
       } else {
         throw new Error('Failed to create round');
       }
@@ -622,10 +622,10 @@ const AdminDashboard = ({ handleLogout }) => {
       
       if (response.ok) {
         alert('Round updated successfully!');
-        setShowRoundModal(false);
         setEditingRound(null);
         setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
-        fetchRounds();
+        await fetchRounds(); // Wait for rounds to refresh
+        setShowRoundModal(false); // Close modal after refresh
       } else {
         const errorText = await response.text();
         console.error('Backend error response:', errorText);
@@ -662,7 +662,7 @@ const AdminDashboard = ({ handleLogout }) => {
           setSelectedRound(null);
           setRoundBids([]);
         }
-        fetchRounds();
+        await fetchRounds(); // Wait for rounds to refresh
       } else {
         throw new Error('Failed to delete round');
       }
@@ -715,8 +715,8 @@ const AdminDashboard = ({ handleLogout }) => {
       
       if (response.ok) {
         alert('Results published successfully! Courses assigned and points refunded.');
-        fetchRounds();
-        fetchBids();
+        await fetchRounds(); // Wait for rounds to refresh
+        await fetchBids(); // Wait for bids to refresh
       } else {
         const errorText = await response.text();
         throw new Error(errorText || 'Failed to publish results');
@@ -852,12 +852,6 @@ const AdminDashboard = ({ handleLogout }) => {
                 >
                   View Bids
                 </button>
-                <button
-                  onClick={() => setCurrentTab('waitlists')}
-                  className="bg-green-50 text-green-700 p-4 rounded-xl font-semibold hover:bg-green-100 transition-all border border-green-200"
-                >
-                  Manage Waitlists
-                </button>
               </div>
             </div>
           </>
@@ -865,7 +859,7 @@ const AdminDashboard = ({ handleLogout }) => {
 
         {/* Tabs */}
         <div className="bg-white rounded-xl border border-gray-200 p-2 flex gap-2 overflow-x-auto">
-          {['overview', 'courses', 'students', 'bids', 'waitlists'].map(tab => (
+          {['overview', 'courses', 'students', 'bids'].map(tab => (
             <button
               key={tab}
               onClick={() => setCurrentTab(tab)}
@@ -1190,6 +1184,21 @@ const AdminDashboard = ({ handleLogout }) => {
                         <p className="text-lg font-bold text-blue-700">{countdown}</p>
                       </div>
 
+                      {/* Results Announced Badge */}
+                      {round.processedAt && (
+                        <div className="bg-green-50 p-4 rounded-xl border border-green-200">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                            <div>
+                              <p className="text-sm font-bold text-green-700">Results Announced</p>
+                              <p className="text-xs text-green-600">
+                                Processed on {formatDateTimeEST(round.processedAt)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="space-y-2 text-sm">
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-500" />
@@ -1225,10 +1234,11 @@ const AdminDashboard = ({ handleLogout }) => {
                         </button>
                       </div>
 
-                      {roundStatus.status === 'closed' && (
+                      {/* Publish Results button - only show if closed AND not yet processed */}
+                      {roundStatus.status === 'closed' && !round.processedAt && (
                         <button
                           onClick={() => handlePublishResults(round.roundId)}
-                          className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-all font-semibold"
+                          className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-all font-semibold"
                         >
                           <CheckCircle className="w-4 h-4" />
                           Publish Results
@@ -1247,140 +1257,7 @@ const AdminDashboard = ({ handleLogout }) => {
             )}
           </div>
         )}
-
-        {/* Waitlists Tab */}
-        {currentTab === 'waitlists' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-800">Waitlist Management</h2>
-                  <p className="text-sm text-gray-600 mt-1">Manage course waitlists and promote students</p>
-                </div>
-                <button
-                  onClick={handleProcessAllWaitlists}
-                  className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-all"
-                >
-                  <Activity className="w-5 h-5" />
-                  Process All Waitlists
-                </button>
-              </div>
-
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-                <p className="text-sm text-blue-800">
-                  <span className="font-semibold">ℹ️ How it works:</span> Students are automatically added to waitlists when they lose bids. 
-                  Waitlist positions are based on bid amount (higher bids get priority), then timestamp (earlier bids get priority).
-                  When a student drops a course, the next student on the waitlist is automatically enrolled.
-                </p>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading waitlists...</p>
-              </div>
-            ) : Object.keys(waitlistsByCourse).length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <List className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-600 mb-2">No Active Waitlists</h3>
-                <p className="text-gray-500">
-                  Waitlists are automatically created when students lose bids during round processing.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {Object.entries(waitlistsByCourse).map(([courseId, data]) => {
-                  const course = courses.find(c => c.courseId === parseInt(courseId));
-                  const availableSeats = course ? course.capacity - (course.enrolled || 0) : 0;
-                  
-                  return (
-                    <div key={courseId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                      <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-6 border-b border-gray-200">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <span className="text-sm font-bold text-orange-600 bg-white px-3 py-1 rounded-full border-2 border-orange-200">
-                                {data.courseCode}
-                              </span>
-                              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 border-2 border-yellow-200">
-                                {data.students.length} ON WAITLIST
-                              </span>
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-1">{data.courseName}</h3>
-                            <p className="text-sm text-gray-600">
-                              Available Seats: <span className="font-bold text-gray-800">{availableSeats}</span>
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => handlePromoteFromWaitlist(parseInt(courseId))}
-                            disabled={availableSeats <= 0}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition-all ${
-                              availableSeats > 0
-                                ? 'bg-green-600 text-white hover:bg-green-700'
-                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                            }`}
-                          >
-                            <UserCheck className="w-4 h-4" />
-                            Promote Next
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead className="bg-gray-50 border-b border-gray-200">
-                            <tr>
-                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Position</th>
-                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Student</th>
-                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Email</th>
-                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Added</th>
-                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200">
-                            {data.students
-                              .sort((a, b) => a.position - b.position)
-                              .map((waitlist, index) => (
-                              <tr key={waitlist.waitlistId} className={`hover:bg-gray-50 ${index === 0 ? 'bg-green-50' : ''}`}>
-                                <td className="px-6 py-4">
-                                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
-                                    index === 0 ? 'bg-green-600 text-white' : 
-                                    index === 1 ? 'bg-blue-100 text-blue-700' :
-                                    'bg-gray-100 text-gray-700'
-                                  }`}>
-                                    {waitlist.position}
-                                  </span>
-                                </td>
-                                <td className="px-6 py-4">
-                                  <p className="font-medium text-gray-800">{waitlist.studentName}</p>
-                                  <p className="text-xs text-gray-500">ID: {waitlist.studentId}</p>
-                                </td>
-                                <td className="px-6 py-4 text-sm text-gray-600">{waitlist.studentEmail}</td>
-                                <td className="px-6 py-4 text-sm text-gray-500">
-                                  {waitlist.createdAt ? new Date(waitlist.createdAt).toLocaleDateString() : 'N/A'}
-                                </td>
-                                <td className="px-6 py-4">
-                                  <button
-                                    onClick={() => handleRemoveFromWaitlist(waitlist.waitlistId)}
-                                    className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1 rounded-lg hover:bg-red-100 transition-all text-sm font-semibold border border-red-200"
-                                  >
-                                    <X className="w-3 h-3" />
-                                    Remove
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+        
       </div>
 
       {/* Round Bids Modal */}
