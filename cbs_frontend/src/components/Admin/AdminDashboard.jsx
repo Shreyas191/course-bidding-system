@@ -77,12 +77,11 @@ const AdminDashboard = ({ handleLogout }) => {
     return time.substring(0, 5);
   };
 
-  // Helper function to format datetime in EST timezone
-  const formatDateTimeEST = (dateString) => {
+  // Helper function to format datetime in local timezone
+  const formatDateTime = (dateString) => {
     if (!dateString) return 'Not set';
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
-      timeZone: 'America/New_York',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -145,7 +144,7 @@ const AdminDashboard = ({ handleLogout }) => {
   }
   
   // After end time but not processed yet
-  return { status: 'completed', label: 'Completed', color: 'bg-blue-100 text-blue-700' };
+  return { status: 'closed', label: ' closed', color: 'bg-blue-100 text-blue-700' };
 };
 
   // Helper function to calculate countdown
@@ -1269,7 +1268,7 @@ const AdminDashboard = ({ handleLogout }) => {
                             <div>
                               <p className="text-sm font-bold text-green-700">Results Announced</p>
                               <p className="text-xs text-green-600">
-                                Processed on {formatDateTimeEST(round.processedAt)}
+                                Processed on {formatDateTime(round.processedAt)}
                               </p>
                             </div>
                           </div>
@@ -1280,12 +1279,12 @@ const AdminDashboard = ({ handleLogout }) => {
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-500" />
                           <span className="text-gray-600">Start:</span>
-                          <span className="font-medium">{formatDateTimeEST(round.startTime)}</span>
+                          <span className="font-medium">{formatDateTime(round.startTime)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-500" />
                           <span className="text-gray-600">End:</span>
-                          <span className="font-medium">{formatDateTimeEST(round.endTime)}</span>
+                          <span className="font-medium">{formatDateTime(round.endTime)}</span>
                         </div>
                       </div>
 
@@ -1747,7 +1746,7 @@ const AdminDashboard = ({ handleLogout }) => {
                   >
                     <option value="pending">Pending</option>
                     <option value="active">Active</option>
-                    <option value="completed">Completed</option>
+                    <option value="closed">Closed</option>
                   </select>
                 </div>
               </div>

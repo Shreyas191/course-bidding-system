@@ -507,7 +507,7 @@ public ResponseEntity<?> updateRound(@PathVariable Integer id, @RequestBody Map<
             return ResponseEntity.badRequest().body("End time is required");
         }
         
-        // Parse timestamps
+        // Parse timestamps - FIX: Parse BEFORE validating
         Timestamp startTime;
         Timestamp endTime;
         
@@ -532,14 +532,28 @@ public ResponseEntity<?> updateRound(@PathVariable Integer id, @RequestBody Map<
             );
         }
         
-        // CRITICAL: Validate end > start
+        // CRITICAL FIX: Validate AFTER parsing to Timestamp objects
+        log.info("Comparing timestamps:");
+        log.info("  Start millis: {}", startTime.getTime());
+        log.info("  End millis: {}", endTime.getTime());
+        log.info("  End after Start? {}", endTime.after(startTime));
+        
         if (!endTime.after(startTime)) {
-            log.error("Invalid time range: end <= start");
-            log.error("  Start: {}", startTime);
-            log.error("  End: {}", endTime);
+            log.error("VALIDATION FAILED: End time is NOT after start time");
+            log.error("  Start: {} ({})", startTime, startTime.getTime());
+            log.error("  End: {} ({})", endTime, endTime.getTime());
+            log.error("  Difference in seconds: {}", (endTime.getTime() - startTime.getTime()) / 1000);
+            
             return ResponseEntity.badRequest().body(
-                String.format("End time must be after start time. Start: %s, End: %s", 
-                    startTime, endTime)
+                String.format(
+                    "End time must be after start time.\n" +
+                    "Start: %s\n" +
+                    "End: %s\n" +
+                    "Difference: %d seconds",
+                    startTime, 
+                    endTime,
+                    (endTime.getTime() - startTime.getTime()) / 1000
+                )
             );
         }
         
@@ -553,6 +567,8 @@ public ResponseEntity<?> updateRound(@PathVariable Integer id, @RequestBody Map<
         existing.setStatus(status != null ? status : existing.getStatus());
         
         log.info("Round object before save: {}", existing);
+        log.info("  Start timestamp: {} (millis: {})", existing.getStartTime(), existing.getStartTime().getTime());
+        log.info("  End timestamp: {} (millis: {})", existing.getEndTime(), existing.getEndTime().getTime());
         
         // Save to database
         try {
@@ -560,13 +576,24 @@ public ResponseEntity<?> updateRound(@PathVariable Integer id, @RequestBody Map<
             log.info("✓ Round updated successfully in database");
         } catch (Exception e) {
             log.error("Database error:", e);
+            log.error("Full error message: {}", e.getMessage());
+            log.error("Error class: {}", e.getClass().getName());
+            
             if (e.getMessage() != null && 
                 (e.getMessage().contains("round_chk_2") || 
-                 e.getMessage().contains("CONSTRAINT"))) {
+                 e.getMessage().contains("CONSTRAINT") ||
+                 e.getMessage().contains("end_time"))) {
                 return ResponseEntity.badRequest().body(
-                    "Database constraint violation: End time must be after start time. " +
-                    "This is a database-level check that failed. " +
-                    "Start: " + startTime + ", End: " + endTime
+                    String.format(
+                        "Database constraint violation: The database rejected these times.\n" +
+                        "Start: %s (millis: %d)\n" +
+                        "End: %s (millis: %d)\n" +
+                        "This might be a timezone or database configuration issue.\n" +
+                        "Original error: %s",
+                        startTime, startTime.getTime(),
+                        endTime, endTime.getTime(),
+                        e.getMessage()
+                    )
                 );
             }
             return ResponseEntity.badRequest().body("Database error: " + e.getMessage());
@@ -575,7 +602,8 @@ public ResponseEntity<?> updateRound(@PathVariable Integer id, @RequestBody Map<
         log.info("===== ROUND UPDATE SUCCESSFUL =====");
         
         // Send notification if status changed to active
-        if ("active".equals(status) && !"active".equals(roundRepository.findById(id).getStatus())) {
+        Round finalRound = roundRepository.findById(id);
+        if ("active".equals(status) && finalRound != null && !"active".equals(finalRound.getStatus())) {
             notificationService.broadcastSystemNotification(
                 "Round Started: " + roundName,
                 "Bidding is now open! Start placing your bids."
@@ -586,6 +614,8 @@ public ResponseEntity<?> updateRound(@PathVariable Integer id, @RequestBody Map<
         
     } catch (Exception e) {
         log.error("===== UNEXPECTED ERROR =====", e);
+        log.error("Error message: {}", e.getMessage());
+        log.error("Error stack trace:", e);
         return ResponseEntity.badRequest().body("Error updating round: " + e.getMessage());
     }
 }
