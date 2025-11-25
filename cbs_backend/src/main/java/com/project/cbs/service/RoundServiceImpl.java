@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.time.format.DateTimeFormatter;
+import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -136,14 +138,27 @@ public class RoundServiceImpl implements RoundService {
     }
 
     private RoundDto convertToDto(Round round) {
-        RoundDto dto = new RoundDto();
-        dto.setRoundId(round.getRoundId());
-        dto.setRoundNumber(round.getRoundNumber());
-        dto.setRoundName(round.getRoundName());
-        dto.setStartTime(round.getStartTime() != null ? round.getStartTime().toString() : null);
-        dto.setEndTime(round.getEndTime() != null ? round.getEndTime().toString() : null);
-        dto.setStatus(round.getStatus());
-        dto.setProcessedAt(round.getProcessedAt() != null ? round.getProcessedAt().toString() : null);
-        return dto;
-    }
+    DateTimeFormatter formatter = DateTimeFormatter
+        .ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        .withZone(ZoneId.of("UTC"));
+    
+    RoundDto dto = new RoundDto();
+    dto.setRoundId(round.getRoundId());
+    dto.setRoundNumber(round.getRoundNumber());
+    dto.setRoundName(round.getRoundName());
+    
+    dto.setStartTime(round.getStartTime() != null 
+        ? formatter.format(round.getStartTime().toInstant())
+        : null);
+    dto.setEndTime(round.getEndTime() != null 
+        ? formatter.format(round.getEndTime().toInstant())
+        : null);
+    dto.setProcessedAt(round.getProcessedAt() != null 
+        ? formatter.format(round.getProcessedAt().toInstant())
+        : null);
+    
+    dto.setStatus(round.getStatus());
+    return dto;
+
+}
 }

@@ -3,6 +3,8 @@ package com.project.cbs.controller;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -366,57 +368,50 @@ public ResponseEntity<?> createRound(@RequestBody Map<String, Object> requestBod
         String endTimeStr = (String) requestBody.get("endTime");
         String status = (String) requestBody.get("status");
         
-        log.info("Extracted values:");
-        log.info("  roundNumber: {}", roundNumber);
-        log.info("  roundName: {}", roundName);
-        log.info("  startTime: {}", startTimeStr);
-        log.info("  endTime: {}", endTimeStr);
-        log.info("  status: {}", status);
-        
-        // Validate required fields
+        // Validate
         if (roundNumber == null) {
             return ResponseEntity.badRequest().body("Round number is required");
         }
-        
         if (roundName == null || roundName.trim().isEmpty()) {
             return ResponseEntity.badRequest().body("Round name is required");
         }
-        
         if (startTimeStr == null || startTimeStr.trim().isEmpty()) {
             return ResponseEntity.badRequest().body("Start time is required");
         }
-        
         if (endTimeStr == null || endTimeStr.trim().isEmpty()) {
             return ResponseEntity.badRequest().body("End time is required");
         }
         
-        // Parse timestamps
+        // ✅ Parse as UTC explicitly
         Timestamp startTime;
         Timestamp endTime;
         
         try {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-            LocalDateTime startDateTime = LocalDateTime.parse(startTimeStr, formatter);
-            LocalDateTime endDateTime = LocalDateTime.parse(endTimeStr, formatter);
             
-            startTime = Timestamp.valueOf(startDateTime);
-            endTime = Timestamp.valueOf(endDateTime);
+            LocalDateTime startLocal = LocalDateTime.parse(startTimeStr, formatter);
+            LocalDateTime endLocal = LocalDateTime.parse(endTimeStr, formatter);
             
-            log.info("Parsed timestamps:");
+            // Convert to UTC explicitly
+            ZonedDateTime startUTC = startLocal.atZone(ZoneId.of("UTC"));
+            ZonedDateTime endUTC = endLocal.atZone(ZoneId.of("UTC"));
+            
+            startTime = Timestamp.from(startUTC.toInstant());
+            endTime = Timestamp.from(endUTC.toInstant());
+            
+            log.info("Parsed timestamps as UTC:");
             log.info("  Start: {}", startTime);
             log.info("  End: {}", endTime);
             
         } catch (Exception e) {
             log.error("Failed to parse timestamps", e);
             return ResponseEntity.badRequest().body(
-                "Invalid timestamp format. Expected: YYYY-MM-DD HH:mm:ss. " +
-                "Received start: " + startTimeStr + ", end: " + endTimeStr
+                "Invalid timestamp format. Expected: YYYY-MM-DD HH:mm:ss"
             );
         }
         
         // Validate end > start
         if (!endTime.after(startTime)) {
-            log.error("Invalid time range: end <= start");
             return ResponseEntity.badRequest().body(
                 String.format("End time must be after start time. Start: %s, End: %s", 
                     startTime, endTime)
@@ -425,7 +420,7 @@ public ResponseEntity<?> createRound(@RequestBody Map<String, Object> requestBod
         
         log.info("✓ Validation passed - creating round");
         
-        // Create round object
+        // Create round
         Round round = new Round();
         round.setRoundNumber(roundNumber);
         round.setRoundName(roundName);
@@ -433,35 +428,18 @@ public ResponseEntity<?> createRound(@RequestBody Map<String, Object> requestBod
         round.setEndTime(endTime);
         round.setStatus(status != null && !status.trim().isEmpty() ? status : "pending");
         
-        log.info("Round object to save: {}", round);
+        Integer roundId = roundRepository.save(round);
+        round.setRoundId(roundId);
         
-        // Save to database
-        try {
-            Integer roundId = roundRepository.save(round);
-            round.setRoundId(roundId);
-            log.info("✓ Round created successfully with ID: {}", roundId);
-            
-            // Send notification
-            notificationService.broadcastSystemNotification(
-                "New Bidding Round Created",
-                round.getRoundName() + " has been scheduled. Get ready to place your bids!"
-            );
-            
-            log.info("===== ROUND CREATION SUCCESSFUL =====");
-            return ResponseEntity.ok(round);
-            
-        } catch (Exception e) {
-            log.error("Database error:", e);
-            if (e.getMessage() != null && 
-                (e.getMessage().contains("round_chk_2") || 
-                 e.getMessage().contains("CONSTRAINT"))) {
-                return ResponseEntity.badRequest().body(
-                    "Database constraint violation: End time must be after start time. " +
-                    "Start: " + startTime + ", End: " + endTime
-                );
-            }
-            return ResponseEntity.badRequest().body("Database error: " + e.getMessage());
-        }
+        log.info("✓ Round created successfully with ID: {}", roundId);
+        
+        // Send notification
+        notificationService.broadcastSystemNotification(
+            "New Bidding Round Created",
+            round.getRoundName() + " has been scheduled. Get ready to place your bids!"
+        );
+        
+        return ResponseEntity.ok(round);
         
     } catch (Exception e) {
         log.error("===== UNEXPECTED ERROR =====", e);
@@ -478,82 +456,64 @@ public ResponseEntity<?> updateRound(@PathVariable Integer id, @RequestBody Map<
         
         Round existing = roundRepository.findById(id);
         if (existing == null) {
-            log.error("Round not found: {}", id);
             return ResponseEntity.badRequest().body("Round not found with ID: " + id);
         }
         
-        // Extract and validate fields
+        // Extract fields
         Integer roundNumber = (Integer) requestBody.get("roundNumber");
         String roundName = (String) requestBody.get("roundName");
         String startTimeStr = (String) requestBody.get("startTime");
         String endTimeStr = (String) requestBody.get("endTime");
         String status = (String) requestBody.get("status");
         
-        log.info("Extracted values:");
-        log.info("  roundNumber: {}", roundNumber);
-        log.info("  roundName: {}", roundName);
+        log.info("Received times from frontend (already in UTC):");
         log.info("  startTime: {}", startTimeStr);
         log.info("  endTime: {}", endTimeStr);
-        log.info("  status: {}", status);
         
         // Validate required fields
         if (startTimeStr == null || startTimeStr.trim().isEmpty()) {
-            log.error("Missing start time");
             return ResponseEntity.badRequest().body("Start time is required");
         }
         
         if (endTimeStr == null || endTimeStr.trim().isEmpty()) {
-            log.error("Missing end time");
             return ResponseEntity.badRequest().body("End time is required");
         }
         
-        // Parse timestamps - FIX: Parse BEFORE validating
+        // ✅ CORRECT FIX: Parse as UTC explicitly
         Timestamp startTime;
         Timestamp endTime;
         
         try {
-            // Try parsing MySQL format: YYYY-MM-DD HH:mm:ss
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-            LocalDateTime startDateTime = LocalDateTime.parse(startTimeStr, formatter);
-            LocalDateTime endDateTime = LocalDateTime.parse(endTimeStr, formatter);
             
-            startTime = Timestamp.valueOf(startDateTime);
-            endTime = Timestamp.valueOf(endDateTime);
+            // Parse string to LocalDateTime (timezone-naive)
+            LocalDateTime startLocal = LocalDateTime.parse(startTimeStr, formatter);
+            LocalDateTime endLocal = LocalDateTime.parse(endTimeStr, formatter);
             
-            log.info("Parsed timestamps:");
+            // ✅ Convert to ZonedDateTime in UTC explicitly
+            ZonedDateTime startUTC = startLocal.atZone(ZoneId.of("UTC"));
+            ZonedDateTime endUTC = endLocal.atZone(ZoneId.of("UTC"));
+            
+            // Convert to Timestamp
+            startTime = Timestamp.from(startUTC.toInstant());
+            endTime = Timestamp.from(endUTC.toInstant());
+            
+            log.info("Parsed timestamps as UTC:");
             log.info("  Start: {}", startTime);
             log.info("  End: {}", endTime);
             
         } catch (Exception e) {
             log.error("Failed to parse timestamps", e);
             return ResponseEntity.badRequest().body(
-                "Invalid timestamp format. Expected: YYYY-MM-DD HH:mm:ss. " +
-                "Received start: " + startTimeStr + ", end: " + endTimeStr
+                "Invalid timestamp format. Expected: YYYY-MM-DD HH:mm:ss. Error: " + e.getMessage()
             );
         }
         
-        // CRITICAL FIX: Validate AFTER parsing to Timestamp objects
-        log.info("Comparing timestamps:");
-        log.info("  Start millis: {}", startTime.getTime());
-        log.info("  End millis: {}", endTime.getTime());
-        log.info("  End after Start? {}", endTime.after(startTime));
-        
+        // Validate end > start
         if (!endTime.after(startTime)) {
-            log.error("VALIDATION FAILED: End time is NOT after start time");
-            log.error("  Start: {} ({})", startTime, startTime.getTime());
-            log.error("  End: {} ({})", endTime, endTime.getTime());
-            log.error("  Difference in seconds: {}", (endTime.getTime() - startTime.getTime()) / 1000);
-            
             return ResponseEntity.badRequest().body(
-                String.format(
-                    "End time must be after start time.\n" +
-                    "Start: %s\n" +
-                    "End: %s\n" +
-                    "Difference: %d seconds",
-                    startTime, 
-                    endTime,
-                    (endTime.getTime() - startTime.getTime()) / 1000
-                )
+                String.format("End time must be after start time. Start: %s, End: %s", 
+                    startTime, endTime)
             );
         }
         
@@ -566,60 +526,19 @@ public ResponseEntity<?> updateRound(@PathVariable Integer id, @RequestBody Map<
         existing.setEndTime(endTime);
         existing.setStatus(status != null ? status : existing.getStatus());
         
-        log.info("Round object before save: {}", existing);
-        log.info("  Start timestamp: {} (millis: {})", existing.getStartTime(), existing.getStartTime().getTime());
-        log.info("  End timestamp: {} (millis: {})", existing.getEndTime(), existing.getEndTime().getTime());
+        roundRepository.update(existing);
+        log.info("✓ Round updated successfully in database");
         
-        // Save to database
-        try {
-            roundRepository.update(existing);
-            log.info("✓ Round updated successfully in database");
-        } catch (Exception e) {
-            log.error("Database error:", e);
-            log.error("Full error message: {}", e.getMessage());
-            log.error("Error class: {}", e.getClass().getName());
-            
-            if (e.getMessage() != null && 
-                (e.getMessage().contains("round_chk_2") || 
-                 e.getMessage().contains("CONSTRAINT") ||
-                 e.getMessage().contains("end_time"))) {
-                return ResponseEntity.badRequest().body(
-                    String.format(
-                        "Database constraint violation: The database rejected these times.\n" +
-                        "Start: %s (millis: %d)\n" +
-                        "End: %s (millis: %d)\n" +
-                        "This might be a timezone or database configuration issue.\n" +
-                        "Original error: %s",
-                        startTime, startTime.getTime(),
-                        endTime, endTime.getTime(),
-                        e.getMessage()
-                    )
-                );
-            }
-            return ResponseEntity.badRequest().body("Database error: " + e.getMessage());
-        }
+        // Fetch updated round to return
+        Round updated = roundRepository.findById(id);
         
-        log.info("===== ROUND UPDATE SUCCESSFUL =====");
-        
-        // Send notification if status changed to active
-        Round finalRound = roundRepository.findById(id);
-        if ("active".equals(status) && finalRound != null && !"active".equals(finalRound.getStatus())) {
-            notificationService.broadcastSystemNotification(
-                "Round Started: " + roundName,
-                "Bidding is now open! Start placing your bids."
-            );
-        }
-        
-        return ResponseEntity.ok(existing);
+        return ResponseEntity.ok(updated);
         
     } catch (Exception e) {
         log.error("===== UNEXPECTED ERROR =====", e);
-        log.error("Error message: {}", e.getMessage());
-        log.error("Error stack trace:", e);
         return ResponseEntity.badRequest().body("Error updating round: " + e.getMessage());
     }
 }
-    
     @DeleteMapping("/rounds/{id}")
     public ResponseEntity<?> deleteRound(@PathVariable Integer id) {
         try {
