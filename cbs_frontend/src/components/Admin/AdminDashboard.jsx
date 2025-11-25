@@ -71,6 +71,22 @@ const AdminDashboard = ({ handleLogout }) => {
     return time.substring(0, 5);
   };
 
+  // Helper function to format datetime in EST timezone
+  const formatDateTimeEST = (dateString) => {
+    if (!dateString) return 'Not set';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
   // Fetch departments on mount
   useEffect(() => {
     fetchDepartments();
@@ -499,13 +515,32 @@ const AdminDashboard = ({ handleLogout }) => {
   // Round CRUD operations
   const handleAddRound = async () => {
     try {
+      // Convert local datetime to MySQL format (YYYY-MM-DD HH:mm:ss)
+      const formatForMySQL = (datetimeLocal) => {
+        if (!datetimeLocal) return null;
+        const date = new Date(datetimeLocal);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      };
+
+      const roundData = {
+        ...roundForm,
+        startTime: formatForMySQL(roundForm.startTime),
+        endTime: formatForMySQL(roundForm.endTime)
+      };
+
       const response = await fetch('http://localhost:8080/api/admin/rounds', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(roundForm)
+        body: JSON.stringify(roundData)
       });
       
       if (response.ok) {
@@ -523,14 +558,67 @@ const AdminDashboard = ({ handleLogout }) => {
 
   const handleUpdateRound = async () => {
     try {
+      // Convert local datetime to MySQL format (YYYY-MM-DD HH:mm:ss)
+      const formatForMySQL = (datetimeLocal) => {
+        if (!datetimeLocal) return null;
+        const date = new Date(datetimeLocal);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      };
+      
+      const startFormatted = formatForMySQL(roundForm.startTime);
+      const endFormatted = formatForMySQL(roundForm.endTime);
+      
+      console.log('=== ROUND UPDATE DEBUG ===');
+      console.log('Original form values:', roundForm.startTime, roundForm.endTime);
+      console.log('MySQL formatted:', startFormatted, endFormatted);
+      
+      // Validate BOTH times are provided
+      if (!roundForm.startTime || !roundForm.endTime) {
+        alert('Both start time and end time are required!');
+        return;
+      }
+      
+      // Validate end time is after start time
+      const startDate = new Date(roundForm.startTime);
+      const endDate = new Date(roundForm.endTime);
+      
+      console.log('Start date object:', startDate);
+      console.log('End date object:', endDate);
+      console.log('End > Start?', endDate > startDate);
+      
+      if (endDate <= startDate) {
+        alert('Error: End time must be after start time!\n\n' +
+              `Start: ${startDate.toLocaleString()}\n` +
+              `End: ${endDate.toLocaleString()}`);
+        return;
+      }
+      
+      const roundData = {
+        roundNumber: roundForm.roundNumber,
+        roundName: roundForm.roundName,
+        startTime: startFormatted,
+        endTime: endFormatted,
+        status: roundForm.status
+      };
+      
+      console.log('Final payload being sent:', JSON.stringify(roundData, null, 2));
+
       const response = await fetch(`http://localhost:8080/api/admin/rounds/${editingRound.roundId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(roundForm)
+        body: JSON.stringify(roundData)
       });
+      
+      console.log('Response status:', response.status);
       
       if (response.ok) {
         alert('Round updated successfully!');
@@ -539,10 +627,23 @@ const AdminDashboard = ({ handleLogout }) => {
         setRoundForm({ roundNumber: 1, roundName: '', startTime: '', endTime: '', status: 'pending' });
         fetchRounds();
       } else {
-        throw new Error('Failed to update round');
+        const errorText = await response.text();
+        console.error('Backend error response:', errorText);
+        
+        // Try to parse as JSON
+        try {
+          const errorJson = JSON.parse(errorText);
+          console.error('Parsed error:', errorJson);
+          alert('Failed to update round:\n' + (errorJson.message || errorJson.error || errorText));
+        } catch (e) {
+          alert('Failed to update round:\n' + errorText);
+        }
+        
+        throw new Error(errorText);
       }
     } catch (err) {
-      alert('Error updating round: ' + err.message);
+      console.error('=== FULL ERROR ===', err);
+      console.error('Error stack:', err.stack);
     }
   };
 
@@ -573,11 +674,25 @@ const AdminDashboard = ({ handleLogout }) => {
   const openRoundModal = (round = null) => {
     if (round) {
       setEditingRound(round);
+      
+      // Convert UTC times to local time for datetime-local input
+      const formatForDatetimeLocal = (utcString) => {
+        if (!utcString) return '';
+        const date = new Date(utcString);
+        // Format: YYYY-MM-DDTHH:mm (required format for datetime-local)
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+      };
+      
       setRoundForm({
         roundNumber: round.roundNumber,
         roundName: round.roundName,
-        startTime: round.startTime?.substring(0, 16) || '',
-        endTime: round.endTime?.substring(0, 16) || '',
+        startTime: formatForDatetimeLocal(round.startTime),
+        endTime: formatForDatetimeLocal(round.endTime),
         status: round.status
       });
     } else {
@@ -1079,12 +1194,12 @@ const AdminDashboard = ({ handleLogout }) => {
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-500" />
                           <span className="text-gray-600">Start:</span>
-                          <span className="font-medium">{round.startTime ? new Date(round.startTime).toLocaleString() : 'Not set'}</span>
+                          <span className="font-medium">{formatDateTimeEST(round.startTime)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-500" />
                           <span className="text-gray-600">End:</span>
-                          <span className="font-medium">{round.endTime ? new Date(round.endTime).toLocaleString() : 'Not set'}</span>
+                          <span className="font-medium">{formatDateTimeEST(round.endTime)}</span>
                         </div>
                       </div>
 
