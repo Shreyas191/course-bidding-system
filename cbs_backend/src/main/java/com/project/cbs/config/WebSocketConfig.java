@@ -23,7 +23,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // WebSocket endpoint with SockJS fallback
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("http://localhost:5173", "http://localhost:3000", "https://course-bidding-system-ax11b1mg5-shreyas191s-projects.vercel.app")
+                .setAllowedOriginPatterns("http://localhost:5173", "http://localhost:3000", "https://course-bidding-system.vercel.app")
                 .withSockJS();
     }
 }
