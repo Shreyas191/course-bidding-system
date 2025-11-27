@@ -14,8 +14,6 @@ const Home = ({
   currentRound,
   roundStatus,
   roundEndTime,
-  round1EndDate,
-  round2EndDate,
   coursesWon,
   coursesLost,
   userProfile,

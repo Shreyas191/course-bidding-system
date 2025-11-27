@@ -80,7 +80,7 @@ const RoundInfo = ({ allRounds, currentRound, roundStatus, roundEndTime }) => {
       } else if (status === 'active') {
         // Round is active - show countdown to end
         setTimerLabel('Ends In');
-        const endTime = activeRoundData.endTime || roundEndTime;
+        const endTime = activeRoundData.endTime;
         const display = formatTimeRemaining(endTime, false);
         setTimeDisplay(display);
         console.log('Timer Update (Active):', display);
@@ -149,9 +149,9 @@ const RoundInfo = ({ allRounds, currentRound, roundStatus, roundEndTime }) => {
           </h2>
           <p className="text-gray-600">Place or modify your course bids</p>
         </div>
-        <div className={`px-4 py-2 rounded-xl font-semibold ${statusDisplay.className}`}>
+        {/* <div className={`px-4 py-2 rounded-xl font-semibold ${statusDisplay.className}`}>
           {statusDisplay.text}
-        </div>
+        </div> */}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
