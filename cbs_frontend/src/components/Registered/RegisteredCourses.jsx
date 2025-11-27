@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Clock, MapPin, Award, Trash2, Loader } from 'lucide-react';
+import { API_URL } from '../../config';
 
 const RegisteredCourses = ({ registeredCourses, onCourseDropped }) => {
   const [droppingCourseId, setDroppingCourseId] = useState(null);
@@ -30,7 +31,7 @@ const RegisteredCourses = ({ registeredCourses, onCourseDropped }) => {
 
     try {
       const token = localStorage.getItem('authToken');
-      const url = `http://localhost:8080/api/enrollment/${courseToDelete.enrollmentId}`;
+      const url = `${API_URL}/api/enrollment/${courseToDelete.enrollmentId}`;
       
       const response = await fetch(url, {
         method: 'DELETE',

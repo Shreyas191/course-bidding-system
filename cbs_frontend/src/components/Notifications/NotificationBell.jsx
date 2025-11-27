@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, CheckCheck, X, Trash2 } from 'lucide-react';
 import websocketService from '../../services/websocketService';
 import { toast } from 'react-toastify';
+import { API_URL } from '../../config';
 
 const NotificationBell = ({ userProfile }) => {
   const [notifications, setNotifications] = useState([]);
@@ -16,7 +17,7 @@ const NotificationBell = ({ userProfile }) => {
     
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch('http://localhost:8080/api/notifications', {
+      const response = await fetch(`${API_URL}/api/notifications`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -38,7 +39,7 @@ const NotificationBell = ({ userProfile }) => {
   const fetchUnreadCount = async () => {
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch('http://localhost:8080/api/notifications/unread-count', {
+      const response = await fetch(`${API_URL}/api/notifications/unread-count`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -58,7 +59,7 @@ const NotificationBell = ({ userProfile }) => {
   const markAsRead = async (notificationId) => {
     try {
       const token = localStorage.getItem('authToken');
-      await fetch(`http://localhost:8080/api/notifications/${notificationId}/read`, {
+      await fetch(`${API_URL}/api/notifications/${notificationId}/read`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -81,7 +82,7 @@ const NotificationBell = ({ userProfile }) => {
     try {
       setLoading(true);
       const token = localStorage.getItem('authToken');
-      await fetch('http://localhost:8080/api/notifications/mark-all-read', {
+      await fetch(`${API_URL}/api/notifications/mark-all-read`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

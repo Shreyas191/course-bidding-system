@@ -1,5 +1,6 @@
 import React from 'react';
 import { List, X } from 'lucide-react';
+import { API_URL } from '../../config';
 
 const Waitlist = ({ waitlist, setWaitlist, courses }) => {
   const getCourseById = (id) => courses.find(c => c.id === id);
@@ -7,7 +8,7 @@ const Waitlist = ({ waitlist, setWaitlist, courses }) => {
   const handleRemove = async (waitlistId) => {
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`http://localhost:8080/api/waitlist/${waitlistId}`, {
+      const response = await fetch(`${API_URL}/api/waitlist/${waitlistId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

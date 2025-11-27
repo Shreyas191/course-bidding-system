@@ -227,23 +227,49 @@ const App = () => {
 
   // Fetch all rounds
   const fetchAllRounds = async () => {
-    try {
-      console.log('📥 Fetching rounds from:', `${API_URL}/api/rounds`);
-      const response = await fetch(`${API_URL}/api/rounds`, {
-        headers: getAuthHeaders()
-      });
+  try {
+    console.log('📥 Fetching rounds from:', `${API_URL}/api/rounds`);
+    const response = await fetch(`${API_URL}/api/rounds`, {
+      headers: getAuthHeaders()
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ Rounds fetched:', data);
+      setAllRounds(data || []);
       
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Rounds fetched:', data);
-        setAllRounds(data || []);
+      // Find active round
+      const activeRound = data.find(r => r.status === 'active');
+      
+      if (activeRound) {
+        console.log('✅ Found active round:', activeRound);
+        setCurrentRound(activeRound.roundNumber);
+        setRoundStatus(activeRound.status);
       } else {
-        console.error('❌ Failed to fetch rounds:', response.status);
+        console.log('⚠️ No active round found. Using latest round.');
+        
+        // ✅ Find the most recent round (highest roundNumber)
+        const latestRound = data.reduce((latest, round) => {
+          return round.roundNumber > (latest?.roundNumber || 0) ? round : latest;
+        }, null);
+        
+        if (latestRound) {
+          console.log('📍 Latest round:', latestRound);
+          setCurrentRound(latestRound.roundNumber);
+          setRoundStatus(latestRound.status);
+        } else {
+          console.log('❌ No rounds available at all');
+          setCurrentRound(1);
+          setRoundStatus('pending');
+        }
       }
-    } catch (err) {
-      console.error('❌ Error fetching rounds:', err);
+    } else {
+      console.error('❌ Failed to fetch rounds:', response.status);
     }
-  };
+  } catch (err) {
+    console.error('❌ Error fetching rounds:', err);
+  }
+};
 
   // Fetch all courses
   const fetchAllCourses = async () => {
@@ -702,9 +728,6 @@ const App = () => {
               setCurrentPage={setCurrentPage}
               currentRound={currentRound}
               roundStatus={roundStatus}
-              roundEndTime={roundEndTime}
-              round1EndDate={round1EndDate}
-              round2EndDate={round2EndDate}
               coursesWon={coursesWon}
               coursesLost={coursesLost}
               userProfile={userProfile}
