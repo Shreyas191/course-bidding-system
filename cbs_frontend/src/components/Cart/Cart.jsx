@@ -270,7 +270,7 @@ const Cart = ({
                         <p className="text-xs text-gray-500 mt-1">{course.schedule}</p>
                         
                         {/* Waitlist Option */}
-                        {/* <div className="mt-3 bg-white rounded-lg p-3 border border-gray-200">
+                        <div className="mt-3 bg-white rounded-lg p-3 border border-gray-200">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="checkbox"
@@ -284,7 +284,7 @@ const Cart = ({
                                 : 'Add to waitlist if course becomes full'}
                             </span>
                           </label>
-                        </div> */}
+                        </div>
                       </div>
                       <button
                         onClick={() => handleRemoveFromCart(item.courseId)}
