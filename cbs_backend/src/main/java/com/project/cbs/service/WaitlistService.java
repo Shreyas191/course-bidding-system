@@ -14,8 +14,11 @@ public interface WaitlistService {
     // Remove student from waitlist
     void removeFromWaitlist(Long waitlistId, Long studentId);
     
-    // Promote student from waitlist (manual promotion by admin)
+    // Promote student from waitlist (manual promotion by admin) - OLD METHOD
     void promoteFromWaitlist(Long courseId);
+    
+    // ✅ NEW: Promote from waitlist WITH wallet validation
+    void promoteFromWaitlistWithValidation(Long courseId);
     
     // Process all waitlists (promote students where seats are available)
     void processAllWaitlists();
