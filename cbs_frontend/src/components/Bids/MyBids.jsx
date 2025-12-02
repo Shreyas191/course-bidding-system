@@ -17,7 +17,7 @@ const MyBids = ({ myBids = [], courses = [], currentRound = 1, coursesWon = [], 
 
     try {
       const token = localStorage.getItem('authToken');
-      const response = await fetch(`${API_URL}/api/bids/${bidId}`, {
+      const response = await fetch(`http://localhost:8080/api/bids/${bidId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -70,7 +70,7 @@ const MyBids = ({ myBids = [], courses = [], currentRound = 1, coursesWon = [], 
       const token = localStorage.getItem('authToken');
       
       // Get current round info
-      const roundResponse = await fetch(`${API_URL}/api/rounds/current`, {
+      const roundResponse = await fetch('http://localhost:8080/api/rounds/current', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -84,7 +84,7 @@ const MyBids = ({ myBids = [], courses = [], currentRound = 1, coursesWon = [], 
       const currentRoundData = await roundResponse.json();
       
       // Place new bid (backend will update existing one)
-      const response = await fetch(`${API_URL}/api/bids`, {
+      const response = await fetch('http://localhost:8080/api/bids', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
